@@ -1,0 +1,644 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import math
+
+# ==============================================================================
+# BANCO DE DADOS DE MATERIAIS
+# ==============================================================================
+MATERIALS_DB = {
+    "Aço Estrutural A36": {"E": 200e9, "sigma_y": 250e6, "tau_adm": 145e6},
+    "Aço Inoxidável 304": {"E": 193e9, "sigma_y": 215e6, "tau_adm": 125e6},
+    "Alumínio 6061-T6": {"E": 68.9e9, "sigma_y": 276e6, "tau_adm": 150e6},
+    "Alumínio 7075-T6": {"E": 71.7e9, "sigma_y": 503e6, "tau_adm": 220e6},
+    "Latão C36000": {"E": 97e9, "sigma_y": 310e6, "tau_adm": 160e6},
+    "Cobre C11000": {"E": 117e9, "sigma_y": 230e6, "tau_adm": 120e6},
+    "Liga de Titânio Ti-6Al-4V": {"E": 114e9, "sigma_y": 880e6, "tau_adm": 550e6},
+    "Ferro Fundido Cinzento": {"E": 100e9, "sigma_y": 150e6, "tau_adm": 90e6},
+    "Madeira Pinho/Eucalipto": {"E": 12e9, "sigma_y": 40e6, "tau_adm": 10e6},
+    "Polímero Fibra Carbono": {"E": 150e9, "sigma_y": 600e6, "tau_adm": 300e6}
+}
+
+# ==============================================================================
+# CONVERSOR DE UNIDADES
+# ==============================================================================
+UNITS = {
+    "force": {"kN": 1e3, "N": 1.0, "kgf": 9.80665, "lbf": 4.44822},
+    "pos": {"m": 1.0, "cm": 0.01, "mm": 0.001},
+    "dim": {"mm": 0.001, "cm": 0.01, "m": 1.0},
+    "stress": {"MPa": 1e6, "GPa": 1e9, "Pa": 1.0, "psi": 6894.76, "N/mm²": 1e6}
+}
+
+class ResmatCalculatorApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("A3 - Calculadora Estrutural Interativa | Resistência dos Materiais I")
+        
+        # Iniciar em tela cheia
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        self.geometry(f"{screen_width}x{screen_height}")
+        try:
+            self.state('zoomed')
+        except:
+            self.attributes('-fullscreen', True)
+            
+        self.configure(bg="#1E1E2E")
+
+        # Unidades PADRÃO (só definem a unidade inicial de cada campo)
+        self.u_force = "kN"
+        self.u_pos = "m"
+        self.u_dim = "mm"
+        self.u_stress = "MPa"
+
+        # Variáveis Geométricas e de Carga
+        self.val_P = 100.0          
+        self.val_xP = 0.0           
+        self.val_L = 2.0            
+        self.val_xB = 0.8           
+        self.val_xC = 2.0           
+        self.val_LA = 1.0           
+        self.val_LB = 1.0           
+
+        # Variáveis de Seções Transversais
+        self.viga_shape = tk.StringVar(value="Retangular")
+        self.viga_b = 50.0          
+        self.viga_h = 100.0         
+        self.viga_d = 50.0
+
+        self.barraA_shape = tk.StringVar(value="Circular")
+        self.barraA_b = 20.0
+        self.barraA_h = 20.0
+        self.barraA_d = 20.0        
+
+        self.barraB_shape = tk.StringVar(value="Circular")
+        self.barraB_b = 20.0
+        self.barraB_h = 20.0
+        self.barraB_d = 20.0        
+
+        # Pinos / Rebites
+        self.pinoB_d = 12.0
+        self.pinoB_n = 2
+        self.pinoB_type = "Duplo"
+        
+        self.pinoC_d = 12.0
+        self.pinoC_n = 2
+        self.pinoC_type = "Duplo"
+
+        # Seleção de Materiais
+        self.mat_viga = tk.StringVar(value="Aço Estrutural A36")
+        self.mat_barraA = tk.StringVar(value="Aço Estrutural A36")
+        self.mat_barraB = tk.StringVar(value="Aço Estrutural A36")
+
+        # UNIDADE INDIVIDUAL DE CADA CAMPO
+        # Cada caixa guarda a sua própria unidade, então trocar a unidade
+        # de um campo converte SÓ aquele campo (e não o grupo inteiro).
+        self.field_units = {}   # ex.: {"val_L": "m", "viga_b": "mm", ...}
+        self.field_types = {}   # ex.: {"val_L": "pos", "viga_b": "dim", ...}
+        self.trace_active = True # Trava para evitar loops infinitos de recálculo
+
+        self.entries = {}
+        self.unit_buttons = {}
+
+        self.setup_ui()
+        self.after(100, self.recalculate_and_update)
+
+    def setup_ui(self):
+        header = tk.Frame(self, bg="#181825", height=50)
+        header.pack(fill=tk.X, side=tk.TOP)
+        tk.Label(header, text="A3 RESMAT I — CALCULADORA ESTRUTURAL INTERATIVA", 
+                 font=("Helvetica", 14, "bold"), fg="#CDD6F4", bg="#181825", pady=10).pack()
+
+        main_frame = tk.Frame(self, bg="#1E1E2E")
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        left_panel = tk.Frame(main_frame, bg="#181825", width=360)
+        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+
+        center_panel = tk.Frame(main_frame, bg="#1E1E2E")
+        center_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        right_panel = tk.Frame(main_frame, bg="#181825", width=380)
+        right_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+
+        self.build_inputs(left_panel)
+        self.build_center_view(center_panel)
+        self.build_results_dashboard(right_panel)
+
+    def build_inputs(self, parent):
+        canvas = tk.Canvas(parent, bg="#181825", highlightthickness=0, width=340)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg="#181825")
+
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        def add_section_header(title):
+            lbl = tk.Label(scroll_frame, text=title, font=("Helvetica", 10, "bold"), fg="#89B4FA", bg="#181825", anchor="w")
+            lbl.pack(fill=tk.X, pady=(12, 4), padx=8)
+
+        def add_input_row(label_text, attr_name, unit_type, disable_unit=False):
+            frame = tk.Frame(scroll_frame, bg="#181825")
+            frame.pack(fill=tk.X, padx=8, pady=2)
+            
+            tk.Label(frame, text=label_text, font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+
+            val_var = tk.StringVar(value=str(getattr(self, attr_name)))
+            entry = tk.Entry(frame, textvariable=val_var, width=8, bg="#313244", fg="#CDD6F4", insertbackground="white")
+            entry.pack(side=tk.LEFT, padx=4)
+            self.entries[attr_name] = val_var
+
+            if disable_unit:
+                unit_label = tk.Label(frame, text=unit_type, font=("Helvetica", 8, "bold"), bg="#181825", fg="#A6E3A1", width=5)
+                unit_label.pack(side=tk.LEFT, padx=2)
+            else:
+                curr_unit = getattr(self, f"u_{unit_type}")
+                # Registra a unidade própria deste campo
+                self.field_types[attr_name] = unit_type
+                self.field_units[attr_name] = curr_unit
+                unit_btn = tk.Button(frame, text=curr_unit, font=("Helvetica", 8, "bold"), bg="#45475A", fg="#A6E3A1",
+                                     activebackground="#585B70", activeforeground="#A6E3A1", width=5)
+                # Passa o NOME do campo para converter só ele
+                unit_btn.config(command=lambda a=attr_name: self.toggle_unit(a))
+                unit_btn.pack(side=tk.LEFT, padx=2)
+                self.unit_buttons[attr_name] = unit_btn
+
+            def on_change(*args):
+                if not getattr(self, 'trace_active', True): 
+                    return # Não recalcula enquanto estivermos convertendo todas as caixas
+                try:
+                    val = float(val_var.get())
+                    setattr(self, attr_name, val)
+                    self.recalculate_and_update()
+                except ValueError:
+                    pass
+
+            val_var.trace_add("write", on_change)
+            return entry
+
+        # 1. CARREGAMENTO E GEOMETRIA
+        add_section_header("1. Carregamento e Geometria")
+        add_input_row("Força P:", "val_P", "force")
+        add_input_row("Posição P (xP):", "val_xP", "pos")
+        add_input_row("Comprimento Viga (L):", "val_L", "pos")
+        add_input_row("Posição Barra A (xB):", "val_xB", "pos")
+        add_input_row("Posição Barra B (xC):", "val_xC", "pos")
+        add_input_row("Comprimento Barra A:", "val_LA", "pos")
+        add_input_row("Comprimento Barra B:", "val_LB", "pos")
+
+        # 2. SEÇÕES TRANSVERSAIS
+        def build_shape_section(title, prefix):
+            add_section_header(title)
+            
+            f_type = tk.Frame(scroll_frame, bg="#181825")
+            f_type.pack(fill=tk.X, padx=8, pady=2)
+            tk.Label(f_type, text="Tipo de Seção:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+            
+            shape_var = getattr(self, f"{prefix}_shape")
+            cb_shape = ttk.Combobox(f_type, textvariable=shape_var, values=["Retangular", "Circular"], state="readonly", width=10)
+            cb_shape.pack(side=tk.LEFT)
+
+            b_entry = add_input_row("Largura (b):", f"{prefix}_b", "dim")
+            h_entry = add_input_row("Altura (h):", f"{prefix}_h", "dim")
+            d_entry = add_input_row("Diâmetro (d):", f"{prefix}_d", "dim")
+
+            def update_fields(*args):
+                if shape_var.get() == "Retangular":
+                    b_entry.config(state="normal")
+                    h_entry.config(state="normal")
+                    d_entry.config(state="disabled")
+                else:
+                    b_entry.config(state="disabled")
+                    h_entry.config(state="disabled")
+                    d_entry.config(state="normal")
+                self.recalculate_and_update()
+            
+            shape_var.trace_add("write", update_fields)
+            cb_shape.bind("<<ComboboxSelected>>", update_fields)
+            update_fields()
+
+        build_shape_section("2.1 Seção Viga Principal (AC)", "viga")
+        build_shape_section("2.2 Seção Barra A (BD)", "barraA")
+        build_shape_section("2.3 Seção Barra B (CE)", "barraB")
+
+        # 3. PINOS E LIGAÇÕES
+        add_section_header("3. Pinos e Ligações")
+        add_input_row("Diâmetro Pino B:", "pinoB_d", "dim")
+        add_input_row("Diâmetro Pino C:", "pinoC_d", "dim")
+
+        f_pin = tk.Frame(scroll_frame, bg="#181825")
+        f_pin.pack(fill=tk.X, padx=8, pady=4)
+        tk.Label(f_pin, text="Cisalhamento B:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+        type_b_cb = ttk.Combobox(f_pin, values=["Simples", "Duplo"], width=10, state="readonly")
+        type_b_cb.set(self.pinoB_type)
+        type_b_cb.pack(side=tk.LEFT)
+        type_b_cb.bind("<<ComboboxSelected>>", lambda e: [setattr(self, 'pinoB_type', type_b_cb.get()), self.recalculate_and_update()])
+
+        f_pinc = tk.Frame(scroll_frame, bg="#181825")
+        f_pinc.pack(fill=tk.X, padx=8, pady=4)
+        tk.Label(f_pinc, text="Cisalhamento C:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+        type_c_cb = ttk.Combobox(f_pinc, values=["Simples", "Duplo"], width=10, state="readonly")
+        type_c_cb.set(self.pinoC_type)
+        type_c_cb.pack(side=tk.LEFT)
+        type_c_cb.bind("<<ComboboxSelected>>", lambda e: [setattr(self, 'pinoC_type', type_c_cb.get()), self.recalculate_and_update()])
+
+        # 4. SELEÇÃO DE MATERIAIS
+        add_section_header("4. Seleção de Materiais")
+        mats_list = list(MATERIALS_DB.keys()) + ["Personalizado"]
+
+        def add_mat_combo(label, var_ref, prefix):
+            f = tk.Frame(scroll_frame, bg="#181825")
+            f.pack(fill=tk.X, padx=8, pady=3)
+            tk.Label(f, text=label, font=("Helvetica", 9), fg="#CDD6F4", bg="#181825").pack(anchor="w")
+            
+            cb = ttk.Combobox(f, textvariable=var_ref, values=mats_list, state="readonly")
+            cb.pack(fill=tk.X, pady=2)
+            
+            custom_frame = tk.Frame(f, bg="#181825")
+            tk.Label(custom_frame, text="↳ Elasticidade (GPa):", font=("Helvetica", 8, "italic"), fg="#BAC2DE", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+            
+            custom_var = tk.StringVar(value="200.0")
+            setattr(self, f"{prefix}_custom_E", custom_var)
+            
+            custom_entry = tk.Entry(custom_frame, textvariable=custom_var, width=8, bg="#313244", fg="#F9E2AF", insertbackground="white")
+            custom_entry.pack(side=tk.LEFT, padx=4)
+
+            def on_mat_change(*args):
+                if var_ref.get() == "Personalizado":
+                    custom_frame.pack(fill=tk.X, pady=2)
+                else:
+                    custom_frame.pack_forget()
+                self.recalculate_and_update()
+
+            var_ref.trace_add("write", on_mat_change)
+            custom_var.trace_add("write", lambda *args: self.recalculate_and_update())
+            
+            on_mat_change() 
+
+        add_mat_combo("Material da Viga AC:", self.mat_viga, "viga")
+        add_mat_combo("Material da Barra A (BD):", self.mat_barraA, "barraA")
+        add_mat_combo("Material da Barra B (CE):", self.mat_barraB, "barraB")
+
+    # ==============================================================================
+    # LÓGICA DE CONVERSÃO DE UNIDADES (POR CAMPO)
+    # ==============================================================================
+    def si(self, attr):
+        """Valor do campo convertido para o SI (N ou m), usando a unidade daquele campo."""
+        return getattr(self, attr) * UNITS[self.field_types[attr]][self.field_units[attr]]
+
+    def toggle_unit(self, attr):
+        unit_type = self.field_types[attr]
+        units_dict = UNITS[unit_type]
+        keys = list(units_dict.keys())
+        curr_unit = self.field_units[attr]
+        new_unit = keys[(keys.index(curr_unit) + 1) % len(keys)]
+
+        # 1. Converte SÓ este campo: unidade atual -> SI -> nova unidade
+        old_val = getattr(self, attr)
+        new_val = old_val * units_dict[curr_unit] / units_dict[new_unit]
+        setattr(self, attr, new_val)
+        self.field_units[attr] = new_unit
+
+        # 2. Atualiza a caixa sem disparar o recálculo no meio
+        self.trace_active = False
+        str_val = f"{new_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{new_val:.4f}" else f"{new_val:.2f}"
+        self.entries[attr].set(str_val)
+        self.trace_active = True
+
+        # 3. Atualiza o botão deste campo e recalcula
+        self.unit_buttons[attr].config(text=new_unit)
+        self.recalculate_and_update()
+
+    def build_center_view(self, parent):
+        self.notebook = ttk.Notebook(parent)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.tab_schema = tk.Frame(self.notebook, bg="#181825")
+        self.notebook.add(self.tab_schema, text="📐 Esquema Estrutural (Clique Duplo P/ Editar P)")
+
+        self.canvas_schema = tk.Canvas(self.tab_schema, bg="#181825", highlightthickness=0)
+        self.canvas_schema.pack(fill=tk.BOTH, expand=True)
+        self.canvas_schema.bind("<Double-Button-1>", self.on_schema_double_click)
+        self.canvas_schema.bind("<Configure>", lambda e: self.recalculate_and_update())
+
+        self.tab_deis = tk.Frame(self.notebook, bg="#181825")
+        self.notebook.add(self.tab_deis, text="📊 DEIS e Deformação")
+
+        self.fig, self.axes = plt.subplots(4, 1, figsize=(7, 9), facecolor='#181825')
+        self.fig.tight_layout(pad=2.2)
+        self.canvas_deis = FigureCanvasTkAgg(self.fig, master=self.tab_deis)
+        self.canvas_deis.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.recalculate_and_update())
+
+    def on_schema_double_click(self, event):
+        new_p = simpledialog.askfloat("Editar Carga P", f"Digite o novo valor de P ({self.field_units['val_P']}):", initialvalue=self.val_P)
+        if new_p is not None:
+            self.val_P = new_p
+            self.entries["val_P"].set(str(new_p))
+            self.recalculate_and_update()
+
+    def draw_structural_schema(self, FA, FB):
+        c = self.canvas_schema
+        c.delete("all")
+
+        w = c.winfo_width()
+        h = c.winfo_height()
+        if w < 50 or h < 50:
+            return
+
+        margin_x = 80
+        y_beam = h / 2
+        L_m = self.si("val_L")
+        scale_x = (w - 2 * margin_x) / (L_m if L_m > 0 else 1.0)
+
+        def x_to_px(x_m):
+            return margin_x + x_m * scale_x
+
+        xA_px = x_to_px(0)
+        xB_px = x_to_px(self.si("val_xB"))
+        xC_px = x_to_px(self.si("val_xC"))
+        xP_px = x_to_px(self.si("val_xP"))
+
+        c.create_line(xA_px, y_beam, xC_px, y_beam, fill="#89B4FA", width=8, capstyle=tk.ROUND)
+        c.create_text((xA_px + xC_px)/2, y_beam - 18, text="Viga Principal AC", fill="#CDD6F4", font=("Helvetica", 10, "bold"))
+
+        y_D = y_beam - 110
+        c.create_line(xB_px, y_beam, xB_px, y_D, fill="#FAB387", width=6)
+        c.create_rectangle(xB_px - 15, y_D - 10, xB_px + 15, y_D, fill="#A6ADC8")
+        c.create_text(xB_px + 22, (y_beam + y_D)/2, text=f"Barra A (BD)\nFA = {FA/1000:.2f} kN", fill="#FAB387", font=("Helvetica", 8, "bold"))
+
+        y_E = y_beam + 110
+        c.create_line(xC_px, y_beam, xC_px, y_E, fill="#A6E3A1", width=6)
+        c.create_rectangle(xC_px - 15, y_E, xC_px + 15, y_E + 10, fill="#A6ADC8")
+        c.create_text(xC_px + 22, (y_beam + y_E)/2, text=f"Barra B (CE)\nFB = {FB/1000:.2f} kN", fill="#A6E3A1", font=("Helvetica", 8, "bold"))
+
+        c.create_line(xP_px, y_beam - 50, xP_px, y_beam, fill="#F38BA8", width=4, arrow=tk.LAST, arrowshape=(10,12,5))
+        c.create_text(xP_px, y_beam - 60, text=f"P = {self.val_P:.1f} {self.field_units['val_P']}", fill="#F38BA8", font=("Helvetica", 9, "bold"))
+
+        for px, py, txt in [(xA_px, y_beam, "A"), (xB_px, y_beam, "B"), (xC_px, y_beam, "C"), (xB_px, y_D, "D"), (xC_px, y_E, "E")]:
+            c.create_oval(px-6, py-6, px+6, py+6, fill="#F9E2AF", outline="black")
+            c.create_text(px, py + 16 if py >= y_beam else py - 16, text=txt, fill="#F9E2AF", font=("Helvetica", 10, "bold"))
+
+    def build_results_dashboard(self, parent):
+        lbl_title = tk.Label(parent, text="📋 RESULTADOS EM TEMPO REAL", font=("Helvetica", 12, "bold"), fg="#A6E3A1", bg="#181825", pady=8)
+        lbl_title.pack(fill=tk.X)
+
+        text_frame = tk.Frame(parent, bg="#1E1E2E")
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.res_text = tk.Text(text_frame, bg="#1E1E2E", fg="#CDD6F4", font=("Consolas", 10), wrap=tk.WORD,
+                                yscrollcommand=scrollbar.set, borderwidth=0, state=tk.DISABLED)
+        self.res_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.res_text.yview)
+
+        self.res_text.tag_config("title", foreground="#89B4FA", font=("Consolas", 11, "bold"), spacing1=10, spacing3=5)
+        self.res_text.tag_config("label", foreground="#BAC2DE", font=("Consolas", 10))
+        self.res_text.tag_config("value", foreground="#F9E2AF", font=("Consolas", 10, "bold"))
+        self.res_text.tag_config("ok", foreground="#A6E3A1", font=("Consolas", 10, "bold"))
+        self.res_text.tag_config("alert", foreground="#F38BA8", font=("Consolas", 10, "bold"))
+        self.res_text.tag_config("separator", foreground="#45475A")
+
+    def insert_res_line(self, label, value, tag="value"):
+        self.res_text.insert(tk.END, f"{label:<25}", "label")
+        self.res_text.insert(tk.END, f"{value}\n", tag)
+
+    def get_area_and_inertia(self, prefix):
+        shape = getattr(self, f"{prefix}_shape").get()
+        if shape == "Retangular":
+            b = self.si(f"{prefix}_b")
+            h = self.si(f"{prefix}_h")
+            area = b * h
+            inertia = (b * (h**3)) / 12.0
+            y_max = h / 2.0
+        else:
+            d = self.si(f"{prefix}_d")
+            area = math.pi * (d / 2)**2
+            inertia = (math.pi * (d**4)) / 64.0
+            y_max = d / 2.0
+        return area, inertia, y_max
+
+    def get_mat_props(self, prefix):
+        mat_name = getattr(self, f"mat_{prefix}").get()
+        if mat_name == "Personalizado":
+            try:
+                e_val = float(getattr(self, f"{prefix}_custom_E").get())
+            except:
+                e_val = 200.0
+            return {"E": e_val * 1e9, "sigma_y": float('inf'), "tau_adm": float('inf')}
+        return MATERIALS_DB[mat_name]
+
+    def out_units(self):
+        """Unidades usadas nos RESULTADOS e gráficos: as mesmas dos campos P e L."""
+        return self.field_units["val_P"], self.field_units["val_L"]
+
+    def recalculate_and_update(self):
+        if not self.trace_active: return
+        # Durante a montagem da tela ainda faltam campos/painéis; espera tudo existir
+        if not hasattr(self, "res_text"): return
+        try:
+            P = self.si("val_P")
+            L = self.si("val_L")
+            xP = self.si("val_xP")
+            xB = self.si("val_xB")
+            xC = self.si("val_xC")
+            LA_m = self.si("val_LA")
+            LB_m = self.si("val_LB")
+
+            if abs(xC - xB) < 1e-6:
+                return
+
+            FA = P * (xC - xP) / (xC - xB)
+            FB = P - FA
+
+            state_A = "TRAÇÃO" if FA > 0 else ("COMPRESSÃO" if FA < 0 else "NEUTRO")
+            state_B = "TRAÇÃO" if FB > 0 else ("COMPRESSÃO" if FB < 0 else "NEUTRO")
+
+            area_A, _, _ = self.get_area_and_inertia("barraA")
+            area_B, _, _ = self.get_area_and_inertia("barraB")
+            area_viga, I_viga, y_max = self.get_area_and_inertia("viga")
+
+            sigma_A = abs(FA) / area_A if area_A > 0 else 0
+            sigma_B = abs(FB) / area_B if area_B > 0 else 0
+
+            x_arr = np.linspace(0, L, 500)
+            V_arr = np.zeros_like(x_arr)
+            M_arr = np.zeros_like(x_arr)
+
+            for i, x in enumerate(x_arr):
+                v_val = 0.0
+                if x >= xP: v_val -= P
+                if x >= xB: v_val += FA
+                if x >= xC: v_val += FB
+                V_arr[i] = v_val
+
+                m_val = 0.0
+                if x >= xP: m_val -= P * (x - xP)
+                if x >= xB: m_val += FA * (x - xB)
+                if x >= xC: m_val += FB * (x - xC)
+                M_arr[i] = m_val
+
+            sigma_flex_arr = (np.abs(M_arr) * y_max) / I_viga if I_viga > 0 else np.zeros_like(x_arr)
+
+            V_max = V_arr[np.argmax(np.abs(V_arr))]
+            M_max = M_arr[np.argmax(np.abs(M_arr))]
+            sigma_flex_max = np.max(sigma_flex_arr)
+
+            mat_v = self.get_mat_props("viga")
+            mat_a = self.get_mat_props("barraA")
+            mat_b = self.get_mat_props("barraB")
+
+            E_A = mat_a['E']
+            E_B = mat_b['E']
+            E_viga = mat_v['E']
+
+            delta_A = (abs(FA) * LA_m) / (area_A * E_A) if area_A * E_A > 0 else 0
+            delta_B = (abs(FB) * LB_m) / (area_B * E_B) if area_B * E_B > 0 else 0
+            
+            EI = E_viga * I_viga
+            if EI > 0:
+                dx = x_arr[1] - x_arr[0]
+                curvature = M_arr / EI
+                
+                theta = np.zeros_like(x_arr)
+                for i in range(1, len(x_arr)):
+                    theta[i] = theta[i-1] + 0.5 * (curvature[i-1] + curvature[i]) * dx
+                
+                v = np.zeros_like(x_arr)
+                for i in range(1, len(x_arr)):
+                    v[i] = v[i-1] + 0.5 * (theta[i-1] + theta[i]) * dx
+                
+                idx_B = np.argmin(np.abs(x_arr - xB))
+                idx_C = np.argmin(np.abs(x_arr - xC))
+                
+                v_xB_target = - (FA * LA_m) / (area_A * E_A) if area_A * E_A > 0 else 0
+                v_xC_target = - (FB * LB_m) / (area_B * E_B) if area_B * E_B > 0 else 0
+
+                dist_BC = x_arr[idx_C] - x_arr[idx_B]
+                if dist_BC > 0:
+                    C1 = ((v_xC_target - v[idx_C]) - (v_xB_target - v[idx_B])) / dist_BC
+                    C2 = (v_xB_target - v[idx_B]) - C1 * x_arr[idx_B]
+                    deflection_viga = v + C1 * x_arr + C2
+                    max_deflection_viga = np.max(np.abs(deflection_viga))
+                else:
+                    deflection_viga = np.zeros_like(x_arr)
+                    max_deflection_viga = 0.0
+            else:
+                deflection_viga = np.zeros_like(x_arr)
+                max_deflection_viga = 0.0
+
+            self.draw_structural_schema(FA, FB)
+            self.plot_deis(x_arr, V_arr, M_arr, sigma_flex_arr, deflection_viga)
+
+            u_F, u_L = self.out_units()
+            conv_F = 1.0 / UNITS["force"][u_F]
+            conv_S = 1.0 / UNITS["stress"][self.u_stress]
+            conv_L = 1.0 / UNITS["pos"][u_L]
+
+            self.res_text.config(state=tk.NORMAL)
+            self.res_text.delete("1.0", tk.END)
+
+            sep = "-------------------------------------------\n"
+
+            self.res_text.insert(tk.END, "▶ EQUILÍBRIO ESTRUTURAL\n", "title")
+            self.insert_res_line("Carga Aplicada (P):", f"{P*conv_F:.2f} {u_F}")
+            self.insert_res_line("Reação em D (Barra A):", f"{FA*conv_F:.2f} {u_F}")
+            self.insert_res_line("Reação em E (Barra B):", f"{FB*conv_F:.2f} {u_F}")
+            self.res_text.insert(tk.END, sep, "separator")
+
+            def print_bar_status(nome, forca, estado, sigma, mat_prop):
+                self.res_text.insert(tk.END, f"{nome}:\n", "label")
+                self.insert_res_line("  Esforço Axial:", f"{abs(forca)*conv_F:.2f} {u_F} ({estado})")
+                self.insert_res_line("  Tensão Normal (σ):", f"{sigma*conv_S:.2f} {self.u_stress}")
+                if mat_prop['sigma_y'] == float('inf'):
+                    self.insert_res_line("  Limite Material:", "N/A (Personalizado)")
+                    self.insert_res_line("  Status:", "✅ (Apenas Elástico)", "ok")
+                else:
+                    self.insert_res_line("  Limite Material:", f"{mat_prop['sigma_y']*conv_S:.2f} {self.u_stress}")
+                    status = "✅ SEGURO" if sigma <= mat_prop['sigma_y'] else "❌ ESCOAMENTO"
+                    tag = "ok" if sigma <= mat_prop['sigma_y'] else "alert"
+                    self.insert_res_line("  Status:", status, tag)
+
+            self.res_text.insert(tk.END, "▶ TENSÕES BARRAS VERTICAIS\n", "title")
+            print_bar_status("BARRA A (BD)", FA, state_A, sigma_A, mat_a)
+            self.res_text.insert(tk.END, "\n")
+            print_bar_status("BARRA B (CE)", FB, state_B, sigma_B, mat_b)
+            self.res_text.insert(tk.END, sep, "separator")
+
+            self.res_text.insert(tk.END, "▶ DEFORMAÇÕES ESTRUTURAIS (metros)\n", "title")
+            self.insert_res_line("Alongamento Barra BD:", f"{delta_A:.8f} m")
+            self.insert_res_line("Alongamento Barra CE:", f"{delta_B:.8f} m")
+            self.insert_res_line("Flecha Máxima (Viga AC):", f"{max_deflection_viga:.8f} m")
+            self.res_text.insert(tk.END, sep, "separator")
+
+            self.res_text.insert(tk.END, "▶ FLEXÃO NA VIGA AC\n", "title")
+            self.insert_res_line("Momento Máximo |M|:", f"{abs(M_max)*conv_F*conv_L:.2f} {u_F}·{u_L}")
+            self.insert_res_line("Cortante Máximo |V|:", f"{abs(V_max)*conv_F:.2f} {u_F}")
+            self.insert_res_line("Tensão Flexão (σ_max):", f"{sigma_flex_max*conv_S:.2f} {self.u_stress}")
+            
+            if mat_v['sigma_y'] == float('inf'):
+                self.insert_res_line("Limite Material (σ_y):", "N/A (Personalizado)")
+                self.insert_res_line("Status Viga:", "✅ (Apenas Elástico)", "ok")
+            else:
+                self.insert_res_line("Limite Material (σ_y):", f"{mat_v['sigma_y']*conv_S:.2f} {self.u_stress}")
+                status_V = "✅ SEGURO" if sigma_flex_max <= mat_v['sigma_y'] else "❌ ESCOAMENTO"
+                self.insert_res_line("Status Viga:", status_V, "ok" if sigma_flex_max <= mat_v['sigma_y'] else "alert")
+
+            self.res_text.config(state=tk.DISABLED)
+
+        except Exception as err:
+            print(f"Erro de cálculo: {err}")
+
+    def plot_deis(self, x_arr, V_arr, M_arr, sigma_flex_arr, defl_arr):
+        for ax in self.axes:
+            ax.clear()
+            ax.set_facecolor('#1E1E2E')
+            ax.tick_params(colors='#CDD6F4', labelsize=8)
+            ax.xaxis.label.set_color('#CDD6F4')
+            ax.yaxis.label.set_color('#CDD6F4')
+            ax.grid(True, linestyle='--', alpha=0.3)
+
+        u_F, u_L = self.out_units()
+        conv_F = 1.0 / UNITS["force"][u_F]
+        conv_S = 1.0 / UNITS["stress"][self.u_stress]
+        conv_L = 1.0 / UNITS["pos"][u_L]
+        x_plot = x_arr * conv_L
+
+        self.axes[0].plot(x_plot, V_arr * conv_F, color='#89B4FA', linewidth=2)
+        self.axes[0].fill_between(x_plot, V_arr * conv_F, color='#89B4FA', alpha=0.2)
+        self.axes[0].set_ylabel(f"V ({u_F})", fontsize=8)
+        self.axes[0].set_title("Diagrama de Esforço Cortante (DEC)", color='#CDD6F4', fontsize=9, fontweight='bold')
+
+        self.axes[1].plot(x_plot, M_arr * conv_F * conv_L, color='#FAB387', linewidth=2)
+        self.axes[1].fill_between(x_plot, M_arr * conv_F * conv_L, color='#FAB387', alpha=0.2)
+        self.axes[1].set_ylabel(f"M ({u_F}·{u_L})", fontsize=8)
+        self.axes[1].set_title("Diagrama de Momento Fletor (DMF)", color='#CDD6F4', fontsize=9, fontweight='bold')
+
+        self.axes[2].plot(x_plot, sigma_flex_arr * conv_S, color='#A6E3A1', linewidth=2)
+        self.axes[2].fill_between(x_plot, sigma_flex_arr * conv_S, color='#A6E3A1', alpha=0.2)
+        self.axes[2].set_ylabel(f"σ ({self.u_stress})", fontsize=8)
+        self.axes[2].set_title("Tensão de Flexão Máxima", color='#CDD6F4', fontsize=9, fontweight='bold')
+
+        self.axes[3].plot(x_plot, defl_arr * 1000, color='#F38BA8', linewidth=2)
+        self.axes[3].fill_between(x_plot, defl_arr * 1000, color='#F38BA8', alpha=0.2)
+        self.axes[3].set_ylabel(f"δ (mm)", fontsize=8)
+        self.axes[3].set_xlabel(f"Posição x ({u_L})", fontsize=8)
+        self.axes[3].set_title("Linha Elástica (Deformação da Viga)", color='#CDD6F4', fontsize=9, fontweight='bold')
+
+        self.fig.tight_layout(pad=1.2)
+        self.canvas_deis.draw_idle()
+
+if __name__ == "__main__":
+    app = ResmatCalculatorApp()
+    app.mainloop()
+
+    
