@@ -16,12 +16,14 @@ permissions:
 jobs:
   windows-exe:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"   # acentos e símbolos (δ, σ, τ) no terminal do Windows
     steps:
       - name: Baixar o código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Instalar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
