@@ -36,7 +36,6 @@ class ResmatCalculatorApp(tk.Tk):
         super().__init__()
         self.title("A3 - Calculadora Estrutural Interativa | Resistência dos Materiais I")
         
-        # Iniciar em tela cheia
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         self.geometry(f"{screen_width}x{screen_height}")
@@ -47,7 +46,6 @@ class ResmatCalculatorApp(tk.Tk):
             
         self.configure(bg="#1E1E2E")
 
-        # Unidades PADRÃO (só definem a unidade inicial de cada campo)
         self.u_force = "kN"
         self.u_pos = "m"
         self.u_dim = "mm"
@@ -55,12 +53,12 @@ class ResmatCalculatorApp(tk.Tk):
 
         # Variáveis Geométricas e de Carga
         self.val_P = 100.0          
-        self.val_xP = 0.0           
+        self.val_xP = 0.0            
         self.val_L = 2.0            
-        self.val_xB = 0.8           
-        self.val_xC = 2.0           
-        self.val_LA = 1.0           
-        self.val_LB = 1.0           
+        self.val_xB = 0.8            
+        self.val_xC = 2.0            
+        self.val_LA = 1.0            
+        self.val_LB = 1.0            
 
         # Variáveis de Seções Transversais
         self.viga_shape = tk.StringVar(value="Retangular")
@@ -80,24 +78,21 @@ class ResmatCalculatorApp(tk.Tk):
 
         # Pinos / Rebites
         self.pinoB_d = 12.0
-        self.pinoB_n = 2
         self.pinoB_type = "Duplo"
         
         self.pinoC_d = 12.0
-        self.pinoC_n = 2
         self.pinoC_type = "Duplo"
 
         # Seleção de Materiais
         self.mat_viga = tk.StringVar(value="Aço Estrutural A36")
         self.mat_barraA = tk.StringVar(value="Aço Estrutural A36")
         self.mat_barraB = tk.StringVar(value="Aço Estrutural A36")
+        self.mat_pinoB = tk.StringVar(value="Aço Estrutural A36")
+        self.mat_pinoC = tk.StringVar(value="Aço Estrutural A36")
 
-        # UNIDADE INDIVIDUAL DE CADA CAMPO
-        # Cada caixa guarda a sua própria unidade, então trocar a unidade
-        # de um campo converte SÓ aquele campo (e não o grupo inteiro).
-        self.field_units = {}   # ex.: {"val_L": "m", "viga_b": "mm", ...}
-        self.field_types = {}   # ex.: {"val_L": "pos", "viga_b": "dim", ...}
-        self.trace_active = True # Trava para evitar loops infinitos de recálculo
+        self.field_units = {}
+        self.field_types = {}
+        self.trace_active = True
 
         self.entries = {}
         self.unit_buttons = {}
@@ -159,19 +154,17 @@ class ResmatCalculatorApp(tk.Tk):
                 unit_label.pack(side=tk.LEFT, padx=2)
             else:
                 curr_unit = getattr(self, f"u_{unit_type}")
-                # Registra a unidade própria deste campo
                 self.field_types[attr_name] = unit_type
                 self.field_units[attr_name] = curr_unit
                 unit_btn = tk.Button(frame, text=curr_unit, font=("Helvetica", 8, "bold"), bg="#45475A", fg="#A6E3A1",
                                      activebackground="#585B70", activeforeground="#A6E3A1", width=5)
-                # Passa o NOME do campo para converter só ele
                 unit_btn.config(command=lambda a=attr_name: self.toggle_unit(a))
                 unit_btn.pack(side=tk.LEFT, padx=2)
                 self.unit_buttons[attr_name] = unit_btn
 
             def on_change(*args):
                 if not getattr(self, 'trace_active', True): 
-                    return # Não recalcula enquanto estivermos convertendo todas as caixas
+                    return
                 try:
                     val = float(val_var.get())
                     setattr(self, attr_name, val)
@@ -227,27 +220,6 @@ class ResmatCalculatorApp(tk.Tk):
         build_shape_section("2.2 Seção Barra A (BD)", "barraA")
         build_shape_section("2.3 Seção Barra B (CE)", "barraB")
 
-        # 3. PINOS E LIGAÇÕES
-        add_section_header("3. Pinos e Ligações")
-        add_input_row("Diâmetro Pino B:", "pinoB_d", "dim")
-        add_input_row("Diâmetro Pino C:", "pinoC_d", "dim")
-
-        f_pin = tk.Frame(scroll_frame, bg="#181825")
-        f_pin.pack(fill=tk.X, padx=8, pady=4)
-        tk.Label(f_pin, text="Cisalhamento B:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
-        type_b_cb = ttk.Combobox(f_pin, values=["Simples", "Duplo"], width=10, state="readonly")
-        type_b_cb.set(self.pinoB_type)
-        type_b_cb.pack(side=tk.LEFT)
-        type_b_cb.bind("<<ComboboxSelected>>", lambda e: [setattr(self, 'pinoB_type', type_b_cb.get()), self.recalculate_and_update()])
-
-        f_pinc = tk.Frame(scroll_frame, bg="#181825")
-        f_pinc.pack(fill=tk.X, padx=8, pady=4)
-        tk.Label(f_pinc, text="Cisalhamento C:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
-        type_c_cb = ttk.Combobox(f_pinc, values=["Simples", "Duplo"], width=10, state="readonly")
-        type_c_cb.set(self.pinoC_type)
-        type_c_cb.pack(side=tk.LEFT)
-        type_c_cb.bind("<<ComboboxSelected>>", lambda e: [setattr(self, 'pinoC_type', type_c_cb.get()), self.recalculate_and_update()])
-
         # 4. SELEÇÃO DE MATERIAIS
         add_section_header("4. Seleção de Materiais")
         mats_list = list(MATERIALS_DB.keys()) + ["Personalizado"]
@@ -284,12 +256,31 @@ class ResmatCalculatorApp(tk.Tk):
         add_mat_combo("Material da Viga AC:", self.mat_viga, "viga")
         add_mat_combo("Material da Barra A (BD):", self.mat_barraA, "barraA")
         add_mat_combo("Material da Barra B (CE):", self.mat_barraB, "barraB")
+        add_mat_combo("Material do Pino B:", self.mat_pinoB, "pinoB")
+        add_mat_combo("Material do Pino C:", self.mat_pinoC, "pinoC")
 
-    # ==============================================================================
-    # LÓGICA DE CONVERSÃO DE UNIDADES (POR CAMPO)
-    # ==============================================================================
+        # 3. PINOS E LIGAÇÕES
+        add_section_header("3. Pinos e Ligações")
+        add_input_row("Diâmetro Pino B:", "pinoB_d", "dim")
+        add_input_row("Diâmetro Pino C:", "pinoC_d", "dim")
+
+        f_pin = tk.Frame(scroll_frame, bg="#181825")
+        f_pin.pack(fill=tk.X, padx=8, pady=4)
+        tk.Label(f_pin, text="Cisalhamento B:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+        type_b_cb = ttk.Combobox(f_pin, values=["Simples", "Duplo"], width=10, state="readonly")
+        type_b_cb.set(self.pinoB_type)
+        type_b_cb.pack(side=tk.LEFT)
+        type_b_cb.bind("<<ComboboxSelected>>", lambda e: [setattr(self, 'pinoB_type', type_b_cb.get()), self.recalculate_and_update()])
+
+        f_pinc = tk.Frame(scroll_frame, bg="#181825")
+        f_pinc.pack(fill=tk.X, padx=8, pady=4)
+        tk.Label(f_pinc, text="Cisalhamento C:", font=("Helvetica", 9), fg="#CDD6F4", bg="#181825", width=19, anchor="w").pack(side=tk.LEFT)
+        type_c_cb = ttk.Combobox(f_pinc, values=["Simples", "Duplo"], width=10, state="readonly")
+        type_c_cb.set(self.pinoC_type)
+        type_c_cb.pack(side=tk.LEFT)
+        type_c_cb.bind("<<ComboboxSelected>>", lambda e: [setattr(self, 'pinoC_type', type_c_cb.get()), self.recalculate_and_update()])
+
     def si(self, attr):
-        """Valor do campo convertido para o SI (N ou m), usando a unidade daquele campo."""
         return getattr(self, attr) * UNITS[self.field_types[attr]][self.field_units[attr]]
 
     def toggle_unit(self, attr):
@@ -299,19 +290,16 @@ class ResmatCalculatorApp(tk.Tk):
         curr_unit = self.field_units[attr]
         new_unit = keys[(keys.index(curr_unit) + 1) % len(keys)]
 
-        # 1. Converte SÓ este campo: unidade atual -> SI -> nova unidade
         old_val = getattr(self, attr)
         new_val = old_val * units_dict[curr_unit] / units_dict[new_unit]
         setattr(self, attr, new_val)
         self.field_units[attr] = new_unit
 
-        # 2. Atualiza a caixa sem disparar o recálculo no meio
         self.trace_active = False
         str_val = f"{new_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{new_val:.4f}" else f"{new_val:.2f}"
         self.entries[attr].set(str_val)
         self.trace_active = True
 
-        # 3. Atualiza o botão deste campo e recalcula
         self.unit_buttons[attr].config(text=new_unit)
         self.recalculate_and_update()
 
@@ -362,12 +350,13 @@ class ResmatCalculatorApp(tk.Tk):
             return margin_x + x_m * scale_x
 
         xA_px = x_to_px(0)
+        xEnd_px = x_to_px(L_m)
         xB_px = x_to_px(self.si("val_xB"))
         xC_px = x_to_px(self.si("val_xC"))
         xP_px = x_to_px(self.si("val_xP"))
 
-        c.create_line(xA_px, y_beam, xC_px, y_beam, fill="#89B4FA", width=8, capstyle=tk.ROUND)
-        c.create_text((xA_px + xC_px)/2, y_beam - 18, text="Viga Principal AC", fill="#CDD6F4", font=("Helvetica", 10, "bold"))
+        c.create_line(xA_px, y_beam, xEnd_px, y_beam, fill="#89B4FA", width=8, capstyle=tk.ROUND)
+        c.create_text((xA_px + xEnd_px)/2, y_beam - 18, text="Viga Principal AC (Extensão L)", fill="#CDD6F4", font=("Helvetica", 10, "bold"))
 
         y_D = y_beam - 110
         c.create_line(xB_px, y_beam, xB_px, y_D, fill="#FAB387", width=6)
@@ -438,12 +427,10 @@ class ResmatCalculatorApp(tk.Tk):
         return MATERIALS_DB[mat_name]
 
     def out_units(self):
-        """Unidades usadas nos RESULTADOS e gráficos: as mesmas dos campos P e L."""
         return self.field_units["val_P"], self.field_units["val_L"]
 
     def recalculate_and_update(self):
         if not self.trace_active: return
-        # Durante a montagem da tela ainda faltam campos/painéis; espera tudo existir
         if not hasattr(self, "res_text"): return
         try:
             P = self.si("val_P")
@@ -469,6 +456,21 @@ class ResmatCalculatorApp(tk.Tk):
 
             sigma_A = abs(FA) / area_A if area_A > 0 else 0
             sigma_B = abs(FB) / area_B if area_B > 0 else 0
+
+            # Cálculo de Pinos / Cisalhamento
+            d_pinB = self.si("pinoB_d")
+            d_pinC = self.si("pinoC_d")
+            area_pinB = math.pi * (d_pinB / 2)**2
+            area_pinC = math.pi * (d_pinC / 2)**2
+
+            n_shear_B = 2 if self.pinoB_type == "Duplo" else 1
+            n_shear_C = 2 if self.pinoC_type == "Duplo" else 1
+
+            tau_B = abs(FA) / (n_shear_B * area_pinB) if area_pinB > 0 else 0
+            tau_C = abs(FB) / (n_shear_C * area_pinC) if area_pinC > 0 else 0
+
+            mat_pinoB = self.get_mat_props("pinoB")
+            mat_pinoC = self.get_mat_props("pinoC")
 
             x_arr = np.linspace(0, L, 500)
             V_arr = np.zeros_like(x_arr)
@@ -574,6 +576,25 @@ class ResmatCalculatorApp(tk.Tk):
             print_bar_status("BARRA B (CE)", FB, state_B, sigma_B, mat_b)
             self.res_text.insert(tk.END, sep, "separator")
 
+            def print_pin_status(nome, tau_val, mat_p):
+                self.res_text.insert(tk.END, f"{nome}:\n", "label")
+                self.insert_res_line("  Tensão Cisalhamento (τ):", f"{tau_val*conv_S:.2f} {self.u_stress}")
+                tau_limit = mat_p.get('tau_adm', float('inf'))
+                if tau_limit == float('inf'):
+                    self.insert_res_line("  Limite Admissível (τ_adm):", "N/A (Personalizado)")
+                    self.insert_res_line("  Status Pino:", "✅ (Apenas Elástico)", "ok")
+                else:
+                    self.insert_res_line("  Limite Admissível (τ_adm):", f"{tau_limit*conv_S:.2f} {self.u_stress}")
+                    status = "✅ SEGURO" if tau_val <= tau_limit else "❌ FALHA"
+                    tag = "ok" if tau_val <= tau_limit else "alert"
+                    self.insert_res_line("  Status Pino:", status, tag)
+
+            self.res_text.insert(tk.END, "▶ TENSÕES NOS PINOS (CISALHAMENTO)\n", "title")
+            print_pin_status("PINO B", tau_B, mat_pinoB)
+            self.res_text.insert(tk.END, "\n")
+            print_pin_status("PINO C", tau_C, mat_pinoC)
+            self.res_text.insert(tk.END, sep, "separator")
+
             self.res_text.insert(tk.END, "▶ DEFORMAÇÕES ESTRUTURAIS (metros)\n", "title")
             self.insert_res_line("Alongamento Barra BD:", f"{delta_A:.8f} m")
             self.insert_res_line("Alongamento Barra CE:", f"{delta_B:.8f} m")
@@ -628,11 +649,18 @@ class ResmatCalculatorApp(tk.Tk):
         self.axes[2].set_ylabel(f"σ ({self.u_stress})", fontsize=8)
         self.axes[2].set_title("Tensão de Flexão Máxima", color='#CDD6F4', fontsize=9, fontweight='bold')
 
-        self.axes[3].plot(x_plot, defl_arr * 1000, color='#F38BA8', linewidth=2)
-        self.axes[3].fill_between(x_plot, defl_arr * 1000, color='#F38BA8', alpha=0.2)
+        # Gráfico de Deflexão corrigido (escala ajustada com margem proporcional para evitar aspecto inflado)
+        defl_mm = defl_arr * 1000
+        self.axes[3].plot(x_plot, defl_mm, color='#F38BA8', linewidth=2)
+        self.axes[3].fill_between(x_plot, defl_mm, color='#F38BA8', alpha=0.2)
         self.axes[3].set_ylabel(f"δ (mm)", fontsize=8)
         self.axes[3].set_xlabel(f"Posição x ({u_L})", fontsize=8)
         self.axes[3].set_title("Linha Elástica (Deformação da Viga)", color='#CDD6F4', fontsize=9, fontweight='bold')
+        
+        # Ajuste dinâmico de limites em Y para refletir escala física realista
+        d_min, d_max = np.min(defl_mm), np.max(defl_mm)
+        margin = max(abs(d_max - d_min) * 0.2, 0.001)
+        self.axes[3].set_ylim(d_min - margin, d_max + margin)
 
         self.fig.tight_layout(pad=1.2)
         self.canvas_deis.draw_idle()
@@ -640,5 +668,3 @@ class ResmatCalculatorApp(tk.Tk):
 if __name__ == "__main__":
     app = ResmatCalculatorApp()
     app.mainloop()
-
-    
