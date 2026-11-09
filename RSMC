@@ -640,3 +640,6 @@ class ResmatCalculatorApp(tk.Tk):
 if __name__ == "__main__":
     app = ResmatCalculatorApp()
     app.mainloop()
+
+    #Apenas teste Julia git
+    
