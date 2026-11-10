@@ -1,0 +1,74 @@
+# Gera o CalculadoraRESMAT.exe (Windows) automaticamente a cada mudança.
+# - Em pull requests: o .exe fica na aba "Actions" (seção Artifacts).
+# - Na branch main: o .exe também é publicado em "Releases" (ultima-versao),
+#   para qualquer pessoa do grupo baixar sem precisar de Python.
+name: Gerar executável (Windows)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"   # acentos e símbolos (δ, σ, τ) no terminal do Windows
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Instalar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar bibliotecas
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Testes dos cálculos
+        run: python testes/testes_calculos.py
+
+      - name: Gerar o .exe
+        run: python -m PyInstaller --noconfirm --onefile --windowed --name CalculadoraRESMAT main.py
+
+      - name: Teste rápido do .exe (abre, calcula e fecha)
+        shell: pwsh
+        run: |
+          $env:RESMAT_TESTE_RAPIDO = "1"
+          $p = Start-Process -FilePath "dist\CalculadoraRESMAT.exe" -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(180000)) {
+            $p.Kill()
+            Write-Error "O .exe nao fechou sozinho em 3 minutos."
+            exit 1
+          }
+          if (Test-Path resmat_teste.log) { Get-Content resmat_teste.log }
+          else { Write-Error "O .exe nao gerou o resmat_teste.log."; exit 1 }
+          if ($p.ExitCode -ne 0) { Write-Error "Codigo de saida: $($p.ExitCode)"; exit 1 }
+
+      - name: Guardar o .exe (aba Actions > Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CalculadoraRESMAT-windows
+          path: dist/CalculadoraRESMAT.exe
+          retention-days: 30
+
+      - name: Publicar em Releases (só na main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ultima-versao --yes --cleanup-tag || true
+          gh release create ultima-versao dist/CalculadoraRESMAT.exe \
+            --target "$GITHUB_SHA" \
+            --title "Calculadora RESMAT (última versão)" \
+            --notes "Gerado automaticamente a partir do commit ${GITHUB_SHA::7}. Baixe o CalculadoraRESMAT.exe e dê dois cliques." \
+            --latest
