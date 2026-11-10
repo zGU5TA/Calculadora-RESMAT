@@ -34,8 +34,6 @@ calculadora/
     tema.py                 cores
 testes/
   testes_calculos.py        confere os cálculos com fórmulas conhecidas
-versao_antiga/
-  RSMC.py                   versão antiga, tudo em um arquivo só (referência)
 .github/workflows/
   gerar-executavel.yml      gera o .exe automaticamente no GitHub
 ```
