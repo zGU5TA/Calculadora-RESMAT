@@ -6,20 +6,19 @@ pinos/rebites, DEC, DMF, tensão de flexão e linha elástica.
 
 ## Como abrir
 
-**Sem Python (mais fácil):** baixe o `CalculadoraRESMAT.exe` em
-[Releases](../../releases/latest) e dê dois cliques.
+**Sem Python (mais fácil):** baixe o
+[`CalculadoraRESMAT.exe`](https://github.com/zGU5TA/Calculadora-RESMAT/releases/latest/download/CalculadoraRESMAT.exe)
+(também fica em [Releases](../../releases/latest)) e dê dois cliques.
 Na primeira vez o Windows pode mostrar "O Windows protegeu o computador":
 clique em **Mais informações → Executar assim mesmo** (o .exe não é assinado).
 
 **Pelo código (VS Code):** abra a pasta do projeto e dê play no `main.py`.
 Na primeira vez ele cria a pasta `.venv` e instala numpy e matplotlib sozinho.
-Depois disso dá para abrir com dois cliques em `Abrir Calculadora.bat`.
 
 ## Pastas
 
 ```
 main.py                     ponto de entrada (é nele que se dá play)
-Abrir Calculadora.bat       abre sem VS Code (depois do 1º play)
 requirements.txt            bibliotecas: numpy, matplotlib
 calculadora/
   calculo/                  só matemática (não usa tkinter)

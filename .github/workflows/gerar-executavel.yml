@@ -68,6 +68,7 @@ jobs:
         run: |
           gh release delete ultima-versao --yes --cleanup-tag || true
           gh release create ultima-versao dist/CalculadoraRESMAT.exe \
+            --target "$GITHUB_SHA" \
             --title "Calculadora RESMAT (última versão)" \
             --notes "Gerado automaticamente a partir do commit ${GITHUB_SHA::7}. Baixe o CalculadoraRESMAT.exe e dê dois cliques." \
             --latest
