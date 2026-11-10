@@ -1,0 +1,37 @@
+{
+  "descricao": "Caso de teste A3 - valores de entrada e resultados calculados à mão (veja as contas no README).",
+  "entradas": {
+    "P_kN": 20.0,
+    "xP_m": 0.0,
+    "L_m": 2.0,
+    "xB_m": 0.8,
+    "xC_m": 2.0,
+    "LA_m": 1.0,
+    "LB_m": 1.0,
+    "viga": {"forma": "Retangular", "b_mm": 50, "h_mm": 100},
+    "barraA": {"forma": "Circular", "d_mm": 20},
+    "barraB": {"forma": "Circular", "d_mm": 20},
+    "material_viga_barras": "Aço Estrutural A36 (E = 200 GPa, sigma_esc = 250 MPa)",
+    "pino_B": {"d_mm": 16, "cisalhamento": "Duplo", "quantidade": 1},
+    "pino_C": {"d_mm": 16, "cisalhamento": "Duplo", "quantidade": 1},
+    "material_pinos": "Aço Estrutural A36 (tau_adm = 145 MPa)"
+  },
+  "esperado_manual": {
+    "FA_kN": 33.3333,
+    "FB_kN": -13.3333,
+    "N_barraA_kN": 33.3333,
+    "N_barraB_kN": 13.3333,
+    "estado_barraA": "TRAÇÃO",
+    "estado_barraB": "TRAÇÃO",
+    "sigma_barraA_MPa": 106.103,
+    "sigma_barraB_MPa": 42.441,
+    "tau_pinoB_MPa": 82.893,
+    "tau_pinoC_MPa": 33.157,
+    "V_max_kN": 20.0,
+    "M_max_kNm": 16.0,
+    "x_M_max_m": 0.8,
+    "sigma_flexao_MPa": 192.0,
+    "alongamento_barraA_mm": 0.53052,
+    "alongamento_barraB_mm": 0.21221
+  }
+}

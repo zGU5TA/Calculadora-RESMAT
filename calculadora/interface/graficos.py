@@ -1,5 +1,5 @@
 # ==============================================================================
-# GRÁFICOS: DEC, DMF, tensão de flexão e linha elástica (matplotlib)
+# GRÁFICOS: DEN, DEC, DMF, tensão de flexão e linha elástica (matplotlib)
 # ==============================================================================
 import tkinter as tk
 
@@ -12,18 +12,18 @@ from calculadora.interface.tema import CORES
 
 
 def criar_figura():
-    """Figura com 4 gráficos empilhados (mesmo eixo x)."""
+    """Figura com 5 gráficos empilhados (mesmo eixo x)."""
     try:
-        fig = Figure(figsize=(7, 9), facecolor=CORES["painel"], layout="constrained")
+        fig = Figure(figsize=(7, 10), facecolor=CORES["painel"], layout="constrained")
     except TypeError:   # matplotlib antigo (< 3.5)
-        fig = Figure(figsize=(7, 9), facecolor=CORES["painel"])
+        fig = Figure(figsize=(7, 10), facecolor=CORES["painel"])
         fig.set_tight_layout(True)
-    axes = fig.subplots(4, 1, sharex=True)
+    axes = fig.subplots(5, 1, sharex=True)
     return fig, axes
 
 
 def desenhar_diagramas(axes, d, r, unidades):
-    """Desenha os 4 diagramas. Não depende do tkinter (dá para testar sozinho)."""
+    """Desenha os 5 diagramas. Não depende do tkinter (dá para testar sozinho)."""
     u_F, u_L = unidades
     kF = 1.0 / UNITS["force"][u_F]
     kL = 1.0 / UNITS["pos"][u_L]
@@ -61,29 +61,40 @@ def desenhar_diagramas(axes, d, r, unidades):
                      xytext=(0, 2), textcoords="offset points", ha="center", va="bottom",
                      color=cor, fontsize=8, fontweight="bold")
 
-    # 1) DEC
+    # 1) DEN: esforço normal (a viga só recebe forças verticais, então N(x) = 0)
+    N = r.N * kF
+    axes[0].plot(x, N, color=CORES["amarelo"], linewidth=2)
+    axes[0].set_ylim(-1, 1)
+    axes[0].annotate("N(x) = 0  (sem força axial na viga: todas as forças são verticais)",
+                     (0.5, 0.5), xycoords="axes fraction", ha="center", va="bottom",
+                     xytext=(0, 6), textcoords="offset points",
+                     color=CORES["texto_suave"], fontsize=8)
+    eixo_y(axes[0], f"N ({u_F})")
+    titulo(axes[0], "Diagrama de Esforço Normal (DEN)", espaco=16)   # espaço p/ letras
+
+    # 2) DEC
     V = r.V * kF
-    axes[0].plot(x, V, color=CORES["azul"], linewidth=2)
-    axes[0].fill_between(x, V, color=CORES["azul"], alpha=0.2)
-    eixo_y(axes[0], f"V ({u_F})")
-    titulo(axes[0], "Diagrama de Esforço Cortante (DEC)", espaco=16)   # espaço p/ letras
+    axes[1].plot(x, V, color=CORES["azul"], linewidth=2)
+    axes[1].fill_between(x, V, color=CORES["azul"], alpha=0.2)
+    eixo_y(axes[1], f"V ({u_F})")
+    titulo(axes[1], "Diagrama de Esforço Cortante (DEC)")
 
-    # 2) DMF
+    # 3) DMF
     M = r.M * kF * kL
-    axes[1].plot(x, M, color=CORES["laranja"], linewidth=2)
-    axes[1].fill_between(x, M, color=CORES["laranja"], alpha=0.2)
-    eixo_y(axes[1], f"M ({u_F}·{u_L})")
-    titulo(axes[1], "Diagrama de Momento Fletor (DMF)")
+    axes[2].plot(x, M, color=CORES["laranja"], linewidth=2)
+    axes[2].fill_between(x, M, color=CORES["laranja"], alpha=0.2)
+    eixo_y(axes[2], f"M ({u_F}·{u_L})")
+    titulo(axes[2], "Diagrama de Momento Fletor (DMF)")
 
-    # 3) Tensão de flexão
+    # 4) Tensão de flexão
     S = r.sigma_flex * kS
-    axes[2].plot(x, S, color=CORES["verde"], linewidth=2)
-    axes[2].fill_between(x, S, color=CORES["verde"], alpha=0.2)
-    eixo_y(axes[2], f"σ ({UNIDADE_TENSAO})")
-    titulo(axes[2], "Tensão de Flexão Máxima")
+    axes[3].plot(x, S, color=CORES["verde"], linewidth=2)
+    axes[3].fill_between(x, S, color=CORES["verde"], alpha=0.2)
+    eixo_y(axes[3], f"σ ({UNIDADE_TENSAO})")
+    titulo(axes[3], "Tensão de Flexão Máxima")
 
-    # 4) Linha elástica (sempre em mm)
-    ax = axes[3]
+    # 5) Linha elástica (sempre em mm)
+    ax = axes[4]
     v = r.deflexao * 1000
     ax.plot(x, v, color=CORES["vermelho"], linewidth=2)
     ax.fill_between(x, v, color=CORES["vermelho"], alpha=0.15)

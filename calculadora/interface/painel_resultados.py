@@ -53,6 +53,11 @@ class PainelResultados:
         self._linha("Carga aplicada (P):", f"{d.P * kF:.2f} {u_F}")
         self._linha("Força da barra A na viga:", self._forca_com_sentido(r.FA * kF, u_F))
         self._linha("Força da barra B na viga:", self._forca_com_sentido(r.FB * kF, u_F))
+        # Cada barra transmite ao apoio a mesma força axial que recebe da viga
+        self._linha("Reação no apoio D:", f"{abs(r.barraA.forca_normal) * kF:.2f} {u_F} "
+                                          f"(barra BD em {r.barraA.estado})")
+        self._linha("Reação no apoio E:", f"{abs(r.barraB.forca_normal) * kF:.2f} {u_F} "
+                                          f"(barra CE em {r.barraB.estado})")
         self._separador()
 
         # ---- Barras -------------------------------------------------------
@@ -77,6 +82,7 @@ class PainelResultados:
             tipo = "duplo" if pino.n_planos == 2 else "simples"
             self._subtitulo(f"{pino.nome} (cisalhamento {tipo}):")
             self._linha("  Material:", pino.material.nome)
+            self._linha("  Qtd. de pinos/rebites:", f"{pino.n_pinos}")
             self._linha("  Força transmitida:", f"{pino.forca * kF:.2f} {u_F}")
             self._linha("  Tensão cisalhamento (τ):", f"{pino.tau * kS:.2f} {uS}")
             self._verificar("  Limite admissível (τ_adm):", "  Status:", pino.tau,
@@ -98,10 +104,13 @@ class PainelResultados:
         # ---- Flexão -------------------------------------------------------
         self._titulo("▶ FLEXÃO NA VIGA AC")
         self._linha("Material:", d.mat_viga.nome)
+        self._linha("Esforço normal N(x):", f"0 {u_F} (só há cargas verticais)")
         self._linha("Momento máximo |M|:",
                     f"{abs(r.M_max) * kF * kL:.2f} {u_F}·{u_L} (x = {r.x_M_max * kL:.3f} {u_L})")
-        self._linha("Cortante máximo |V|:", f"{abs(r.V_max) * kF:.2f} {u_F}")
-        self._linha("Tensão de flexão (σ_max):", f"{r.sigma_flex_max * kS:.2f} {uS}")
+        self._linha("Cortante máximo |V|:",
+                    f"{abs(r.V_max) * kF:.2f} {u_F} (x = {r.x_V_max * kL:.3f} {u_L})")
+        self._linha("Tensão de flexão (σ_max):",
+                    f"{r.sigma_flex_max * kS:.2f} {uS} (x = {r.x_sigma_flex_max * kL:.3f} {u_L})")
         self._verificar("Limite (σ_esc):", "Status viga:", r.sigma_flex_max,
                         d.mat_viga.sigma_y, kS, uS, "ESCOAMENTO", "σ_esc")
 

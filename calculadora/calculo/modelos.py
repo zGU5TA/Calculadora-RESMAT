@@ -52,10 +52,17 @@ class Ligacao:
     d: float              # diâmetro (m)
     n_planos: int         # 1 = cisalhamento simples, 2 = duplo
     material: Material
+    n_pinos: int = 1      # quantidade de pinos/rebites na ligação
 
     @property
     def area(self) -> float:
+        """Área da seção transversal de UM pino."""
         return math.pi * (self.d / 2) ** 2
+
+    @property
+    def area_resistente(self) -> float:
+        """Área total que resiste ao cisalhamento: pinos x planos x área de um pino."""
+        return self.n_pinos * self.n_planos * self.area
 
 
 @dataclass
@@ -106,6 +113,7 @@ class ResultadoLigacao:
     tau: float              # Pa
     n_planos: int
     material: Material
+    n_pinos: int = 1
 
 
 @dataclass
@@ -119,15 +127,18 @@ class Resultados:
     pinoC: ResultadoLigacao
     # Diagramas ao longo da viga
     x: np.ndarray
+    N: np.ndarray                 # esforço normal na viga (zero: só há cargas verticais)
     V: np.ndarray
     M: np.ndarray
     sigma_flex: np.ndarray
     deflexao: np.ndarray          # viga flexível + barras (m, + para cima)
     # Valores máximos
     V_max: float
+    x_V_max: float
     M_max: float
     x_M_max: float
     sigma_flex_max: float
+    x_sigma_flex_max: float
     deflexao_max: float
     x_deflexao_max: float
     desloc_B: float

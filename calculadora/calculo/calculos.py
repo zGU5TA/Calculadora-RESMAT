@@ -1,6 +1,8 @@
 # ==============================================================================
 # CÁLCULOS: só matemática (não usa tkinter), tudo no SI (N, m, Pa)
 # ==============================================================================
+import math
+
 import numpy as np
 
 from calculadora.calculo.modelos import (DadosEntrada, ResultadoBarra,
@@ -25,6 +27,16 @@ class CalculadoraEstrutural:
     def validar(self, d: DadosEntrada) -> list:
         """Devolve uma lista de mensagens de erro (vazia = dados OK)."""
         erros = []
+
+        # "nan" e "inf" são aceitos por float(), mas quebrariam todo o cálculo
+        numeros = [d.P, d.xP, d.L, d.xB, d.xC, d.LA, d.LB]
+        for secao in (d.secao_viga, d.secao_barraA, d.secao_barraB):
+            numeros += [secao.b, secao.h, secao.d]
+        for lig in (d.lig_B, d.lig_C):
+            numeros.append(lig.d)
+        if not all(math.isfinite(n) for n in numeros):
+            return ["Há um campo com valor inválido (nan ou infinito). "
+                    "Digite apenas números."]
 
         if d.L <= 0:
             erros.append("O comprimento da viga (L) deve ser maior que zero.")
@@ -52,6 +64,8 @@ class CalculadoraEstrutural:
         for nome, lig in (("pino/rebite B", d.lig_B), ("pino/rebite C", d.lig_C)):
             if lig.d <= 0:
                 erros.append(f"O diâmetro do {nome} deve ser maior que zero.")
+            if lig.n_pinos < 1:
+                erros.append(f"A quantidade de pinos/rebites em {nome} deve ser pelo menos 1.")
 
         for nome, mat in (("viga AC", d.mat_viga),
                           ("barra A", d.mat_barraA),
@@ -93,18 +107,20 @@ class CalculadoraEstrutural:
         v_B = -delta_A
         v_C = delta_B
 
-        # 3) Pinos / rebites: tau = F / (n_planos * área)
+        # 3) Pinos / rebites: tau = F / (n_pinos * n_planos * área de um pino)
+        #    (a força da ligação se divide igualmente entre os pinos)
         pinoB = ResultadoLigacao("PINO/REBITE B", abs(FA),
-                                 abs(FA) / (d.lig_B.n_planos * d.lig_B.area),
-                                 d.lig_B.n_planos, d.lig_B.material)
+                                 abs(FA) / d.lig_B.area_resistente,
+                                 d.lig_B.n_planos, d.lig_B.material, d.lig_B.n_pinos)
         pinoC = ResultadoLigacao("PINO/REBITE C", abs(FB),
-                                 abs(FB) / (d.lig_C.n_planos * d.lig_C.area),
-                                 d.lig_C.n_planos, d.lig_C.material)
+                                 abs(FB) / d.lig_C.area_resistente,
+                                 d.lig_C.n_planos, d.lig_C.material, d.lig_C.n_pinos)
 
         # 4) Diagramas (funções de singularidade / Macaulay)
         x, a_esquerda = self._malha(L, posicoes)
         dist = x[:, None] - posicoes[None, :]                  # x - x_i
         degrau = (dist > 0) | ((dist == 0) & ~a_esquerda[:, None])
+        N = np.zeros_like(x)       # todas as forças na viga são verticais: N(x) = 0
         V = (forcas * degrau).sum(axis=1)                      # V = Σ F_i <x - x_i>^0
         M = (forcas * np.clip(dist, 0, None)).sum(axis=1)      # M = Σ F_i <x - x_i>^1
 
@@ -135,11 +151,11 @@ class CalculadoraEstrutural:
             FA=FA, FB=FB,
             barraA=barraA, barraB=barraB,
             pinoB=pinoB, pinoC=pinoC,
-            x=x, V=V, M=M, sigma_flex=sigma_flex,
+            x=x, N=N, V=V, M=M, sigma_flex=sigma_flex,
             deflexao=deflexao,
-            V_max=V[i_V],
+            V_max=V[i_V], x_V_max=x[i_V],
             M_max=M[i_M], x_M_max=x[i_M],
-            sigma_flex_max=sigma_flex[i_s],
+            sigma_flex_max=sigma_flex[i_s], x_sigma_flex_max=x[i_s],
             deflexao_max=deflexao[i_d], x_deflexao_max=x[i_d],
             desloc_B=v_B, desloc_C=v_C, desloc_A=deflexao[0],
         )

@@ -3,6 +3,8 @@
 # Compara a calculadora com fórmulas conhecidas de Resistência dos Materiais.
 # Rodar da pasta principal:  python testes/testes_calculos.py
 # ==============================================================================
+import dataclasses
+import json
 import math
 import os
 import sys
@@ -115,13 +117,86 @@ def teste_pinos():
     print("OK  cisalhamento simples/duplo nos pinos/rebites")
 
 
+def teste_varios_pinos():
+    # A força se divide entre os pinos: 2 pinos = metade da tensão de 1 pino
+    um = calc.calcular(dados(lig_B=Ligacao(0.012, 2, ACO, n_pinos=1)))
+    tres = calc.calcular(dados(lig_B=Ligacao(0.012, 2, ACO, n_pinos=3)))
+    assert perto(tres.pinoB.tau, um.pinoB.tau / 3)
+    assert tres.pinoB.n_pinos == 3
+    assert calc.validar(dados(lig_C=Ligacao(0.012, 2, ACO, n_pinos=0)))
+    print("OK  quantidade de pinos/rebites divide a força entre eles")
+
+
+def teste_esforco_normal_e_posicoes_dos_maximos():
+    r = calc.calcular(dados(xP=1.2))
+    assert np.all(r.N == 0) and len(r.N) == len(r.x)     # N(x) = 0 em toda a viga
+    assert perto(abs(r.V[np.argmax(np.abs(r.V))]), abs(r.V_max))
+    assert perto(abs(r.M_max), abs(r.M[np.argmin(np.abs(r.x - r.x_M_max))]))
+    assert perto(r.sigma_flex_max,
+                 abs(r.M_max) * dados().secao_viga.y_max / dados().secao_viga.inercia)
+    assert 0 <= r.x_V_max <= 2.0 and 0 <= r.x_sigma_flex_max <= 2.0
+    print("OK  N(x) = 0 e posições de V, M e σ máximos")
+
+
 def teste_validacao():
     assert calc.validar(dados(xP=3.0))                 # P fora da viga
     assert calc.validar(dados(xB=1.0, xC=1.0))         # barras na mesma posição
     assert calc.validar(dados(xC=2.5))                 # barra fora da viga
     assert calc.validar(dados(mat_viga=Material("Personalizado", E=None)))
+    assert calc.validar(dados(P=float("nan")))         # "nan" digitado no campo
+    assert calc.validar(dados(L=float("inf")))         # "inf" digitado no campo
     assert not calc.validar(dados())
-    print("OK  validação das posições e dos materiais")
+    print("OK  validação das posições, dos materiais e de nan/inf")
+
+
+def teste_caso_de_teste_manual():
+    """Compara a calculadora com as contas feitas à mão (testes/caso_de_teste.json)."""
+    pasta = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(pasta, "caso_de_teste.json"), encoding="utf-8") as f:
+        caso = json.load(f)
+    e, esp = caso["entradas"], caso["esperado_manual"]
+
+    d = DadosEntrada(
+        P=e["P_kN"] * 1e3, xP=e["xP_m"], L=e["L_m"], xB=e["xB_m"], xC=e["xC_m"],
+        LA=e["LA_m"], LB=e["LB_m"],
+        secao_viga=Secao("Retangular", b=e["viga"]["b_mm"] / 1e3, h=e["viga"]["h_mm"] / 1e3),
+        secao_barraA=Secao("Circular", d=e["barraA"]["d_mm"] / 1e3),
+        secao_barraB=Secao("Circular", d=e["barraB"]["d_mm"] / 1e3),
+        mat_viga=ACO, mat_barraA=ACO, mat_barraB=ACO,
+        lig_B=Ligacao(e["pino_B"]["d_mm"] / 1e3, 2, ACO, n_pinos=e["pino_B"]["quantidade"]),
+        lig_C=Ligacao(e["pino_C"]["d_mm"] / 1e3, 2, ACO, n_pinos=e["pino_C"]["quantidade"]))
+    assert not calc.validar(d)
+    r = calc.calcular(d)
+
+    linhas = [  # (nome, unidade, valor do programa, valor manual)
+        ("Força da barra A na viga (FA)", "kN", r.FA / 1e3, esp["FA_kN"]),
+        ("Força da barra B na viga (FB)", "kN", r.FB / 1e3, esp["FB_kN"]),
+        ("Esforço normal barra A", "kN", r.barraA.forca_normal / 1e3, esp["N_barraA_kN"]),
+        ("Esforço normal barra B", "kN", r.barraB.forca_normal / 1e3, esp["N_barraB_kN"]),
+        ("Tensão normal barra A", "MPa", r.barraA.tensao / 1e6, esp["sigma_barraA_MPa"]),
+        ("Tensão normal barra B", "MPa", r.barraB.tensao / 1e6, esp["sigma_barraB_MPa"]),
+        ("Cisalhamento pino B", "MPa", r.pinoB.tau / 1e6, esp["tau_pinoB_MPa"]),
+        ("Cisalhamento pino C", "MPa", r.pinoC.tau / 1e6, esp["tau_pinoC_MPa"]),
+        ("Cortante máximo |V|", "kN", abs(r.V_max) / 1e3, esp["V_max_kN"]),
+        ("Momento máximo |M|", "kN·m", abs(r.M_max) / 1e3, esp["M_max_kNm"]),
+        ("Posição do momento máximo", "m", r.x_M_max, esp["x_M_max_m"]),
+        ("Tensão de flexão máxima", "MPa", r.sigma_flex_max / 1e6, esp["sigma_flexao_MPa"]),
+        ("Alongamento barra A", "mm", r.barraA.alongamento * 1e3, esp["alongamento_barraA_mm"]),
+        ("Alongamento barra B", "mm", r.barraB.alongamento * 1e3, esp["alongamento_barraB_mm"]),
+    ]
+    print("\n  CASO DE TESTE (programa x cálculo manual)")
+    print(f"  {'Grandeza':<32}{'Programa':>12}{'Manual':>12}{'Dif. abs.':>12}{'Dif. %':>9}")
+    for nome, un, prog, manual in linhas:
+        dif = prog - manual
+        pct = abs(dif) / abs(manual) * 100 if manual else 0.0
+        print(f"  {nome:<32}{prog:>12.4f}{manual:>12.4f}{dif:>+12.4f}{pct:>8.4f}%  {un}")
+        assert pct < 0.01, f"{nome}: diferença de {pct:.4f}% em relação ao cálculo manual"
+    assert r.barraA.estado == esp["estado_barraA"] and r.barraB.estado == esp["estado_barraB"]
+
+    # Alterar uma entrada tem que alterar o resultado (requisito de interatividade)
+    r2 = calc.calcular(dataclasses.replace(d, P=2 * d.P))
+    assert perto(r2.barraA.tensao, 2 * r.barraA.tensao)
+    print("OK  caso de teste manual (diferenças < 0,01 %) e resultados mudam com a entrada")
 
 
 if __name__ == "__main__":
@@ -131,5 +206,8 @@ if __name__ == "__main__":
     teste_biapoiada()
     teste_barra_A_depois_da_barra_B()
     teste_pinos()
+    teste_varios_pinos()
+    teste_esforco_normal_e_posicoes_dos_maximos()
     teste_validacao()
+    teste_caso_de_teste_manual()
     print("\nTodos os testes passaram.")

@@ -176,6 +176,7 @@ class PainelEntradas:
         self.formas = {}        # "viga"/"barraA"/"barraB" -> StringVar
         self.materiais = {}     # nome -> SeletorMaterial
         self.cisalhamento = {}  # "B"/"C" -> StringVar ("Simples"/"Duplo")
+        self.n_pinos = {}       # "B"/"C" -> StringVar ("1" a "10")
 
         self.quadro = self._criar_area_rolavel(parent)
         self._montar()
@@ -282,6 +283,16 @@ class PainelEntradas:
         var.trace_add("write", lambda *_: self._ao_mudar())
         self.cisalhamento[letra] = var
 
+        linha = tk.Frame(self.quadro, bg=CORES["painel"])
+        linha.pack(fill=tk.X, padx=8, pady=2)
+        tk.Label(linha, text="Qtd. de pinos/rebites:", font=(FONTE, 9), fg=CORES["texto"],
+                 bg=CORES["painel"], width=LARGURA_ROTULO, anchor="w").pack(side=tk.LEFT)
+        var_n = tk.StringVar(value="1")
+        ttk.Combobox(linha, textvariable=var_n, values=[str(n) for n in range(1, 11)],
+                     state="readonly", width=10).pack(side=tk.LEFT)
+        var_n.trace_add("write", lambda *_: self._ao_mudar())
+        self.n_pinos[letra] = var_n
+
         self.materiais[f"pino{letra}"] = SeletorMaterial(
             self.quadro, "Material do pino/rebite:", "ligacao", self._ao_mudar)
 
@@ -311,7 +322,8 @@ class PainelEntradas:
     def _ligacao(self, letra):
         n_planos = 2 if self.cisalhamento[letra].get() == "Duplo" else 1
         return Ligacao(self._si(f"pino{letra}_d"), n_planos,
-                       self.materiais[f"pino{letra}"].material())
+                       self.materiais[f"pino{letra}"].material(),
+                       n_pinos=int(self.n_pinos[letra].get()))
 
     @staticmethod
     def _criar_area_rolavel(parent):
