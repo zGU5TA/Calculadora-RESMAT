@@ -131,7 +131,8 @@ class Resultados:
     V: np.ndarray
     M: np.ndarray
     sigma_flex: np.ndarray
-    deflexao: np.ndarray          # viga flexível + barras (m, + para cima)
+    deflexao: np.ndarray          # viga flexível + barras (m, + para cima) - só referência
+    deflexao_rigida: np.ndarray   # VIGA RÍGIDA: reta que passa por B' e C' (m, + para cima)
     # Valores máximos
     V_max: float
     x_V_max: float
@@ -141,6 +142,9 @@ class Resultados:
     x_sigma_flex_max: float
     deflexao_max: float
     x_deflexao_max: float
-    desloc_B: float
-    desloc_C: float
-    desloc_A: float
+    desloc_B: float               # = alongamento da barra em B (viga rígida)
+    desloc_C: float               # = alongamento da barra em C (viga rígida)
+    desloc_A: float               # em x = 0, por semelhança de triângulos (viga rígida)
+    desloc_P: float               # sob a carga P, por semelhança de triângulos
+    rotacao: float                # rotação da viga rígida (rad, + anti-horário)
+    flexao_extra_max: float       # máx |viga flexível - viga rígida| (m): erro da hipótese

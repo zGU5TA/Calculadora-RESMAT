@@ -142,6 +142,16 @@ class CalculadoraEstrutural:
         C2 = (v_B - vp_B) - C1 * xB
         deflexao = v_particular(x) + C1 * x + C2
 
+        # 6) VIGA RÍGIDA (hipótese do professor): a viga não se deforma, só gira.
+        #    B' e C' são os pontos deslocados pelas barras; a viga é a reta que passa
+        #    por eles. Os outros pontos (A, P...) saem por semelhança de triângulos:
+        #        v(x) = v_B + (v_C - v_B) * (x - xB) / (xC - xB)
+        rotacao = (v_C - v_B) / (xC - xB)                      # inclinação da reta
+        deflexao_rigida = v_B + rotacao * (x - xB)
+        desloc_A = v_B + rotacao * (0.0 - xB)
+        desloc_P = v_B + rotacao * (xP - xB)
+        flexao_extra_max = float(np.max(np.abs(deflexao - deflexao_rigida)))
+
         i_V = int(np.argmax(np.abs(V)))
         i_M = int(np.argmax(np.abs(M)))
         i_s = int(np.argmax(sigma_flex))
@@ -152,12 +162,13 @@ class CalculadoraEstrutural:
             barraA=barraA, barraB=barraB,
             pinoB=pinoB, pinoC=pinoC,
             x=x, N=N, V=V, M=M, sigma_flex=sigma_flex,
-            deflexao=deflexao,
+            deflexao=deflexao, deflexao_rigida=deflexao_rigida,
             V_max=V[i_V], x_V_max=x[i_V],
             M_max=M[i_M], x_M_max=x[i_M],
             sigma_flex_max=sigma_flex[i_s], x_sigma_flex_max=x[i_s],
             deflexao_max=deflexao[i_d], x_deflexao_max=x[i_d],
-            desloc_B=v_B, desloc_C=v_C, desloc_A=deflexao[0],
+            desloc_B=v_B, desloc_C=v_C, desloc_A=desloc_A, desloc_P=desloc_P,
+            rotacao=rotacao, flexao_extra_max=flexao_extra_max,
         )
 
     # --------------------------------------------------------------------------

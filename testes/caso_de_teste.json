@@ -8,12 +8,30 @@
     "xC_m": 2.0,
     "LA_m": 1.0,
     "LB_m": 1.0,
-    "viga": {"forma": "Retangular", "b_mm": 50, "h_mm": 100},
-    "barraA": {"forma": "Circular", "d_mm": 20},
-    "barraB": {"forma": "Circular", "d_mm": 20},
+    "viga": {
+      "forma": "Retangular",
+      "b_mm": 50,
+      "h_mm": 100
+    },
+    "barraA": {
+      "forma": "Circular",
+      "d_mm": 20
+    },
+    "barraB": {
+      "forma": "Circular",
+      "d_mm": 20
+    },
     "material_viga_barras": "Aço Estrutural A36 (E = 200 GPa, sigma_esc = 250 MPa)",
-    "pino_B": {"d_mm": 16, "cisalhamento": "Duplo", "quantidade": 1},
-    "pino_C": {"d_mm": 16, "cisalhamento": "Duplo", "quantidade": 1},
+    "pino_B": {
+      "d_mm": 16,
+      "cisalhamento": "Duplo",
+      "quantidade": 1
+    },
+    "pino_C": {
+      "d_mm": 16,
+      "cisalhamento": "Duplo",
+      "quantidade": 1
+    },
     "material_pinos": "Aço Estrutural A36 (tau_adm = 145 MPa)"
   },
   "esperado_manual": {
@@ -32,6 +50,9 @@
     "x_M_max_m": 0.8,
     "sigma_flexao_MPa": 192.0,
     "alongamento_barraA_mm": 0.53052,
-    "alongamento_barraB_mm": 0.21221
+    "alongamento_barraB_mm": 0.21221,
+    "desloc_B_mm": -0.53052,
+    "desloc_C_mm": 0.21221,
+    "desloc_A_mm_viga_rigida": -1.02567
   }
 }

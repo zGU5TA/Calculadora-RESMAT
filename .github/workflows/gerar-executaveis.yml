@@ -1,0 +1,165 @@
+# Gera os executáveis para Windows, Linux e macOS automaticamente a cada mudança.
+# - Em pull requests: os arquivos ficam na aba "Actions" (seção Artifacts).
+# - Na branch main: tudo também é publicado em "Releases" (ultima-versao),
+#   para qualquer pessoa baixar sem precisar de Python.
+name: Gerar executáveis (Windows, Linux e Mac)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.so }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false          # se um sistema falhar, os outros continuam
+      matrix:
+        include:
+          - so: windows
+            os: windows-latest
+            arquivo: CalculadoraRESMAT.exe
+          - so: linux
+            os: ubuntu-22.04    # versão mais antiga = roda em mais distribuições
+            arquivo: CalculadoraRESMAT-linux.tar.gz
+          - so: mac-apple-silicon   # MacBook com chip M1/M2/M3/M4...
+            os: macos-15
+            arquivo: CalculadoraRESMAT-mac-apple-silicon.zip
+          - so: mac-intel           # MacBook com processador Intel
+            os: macos-15-intel
+            arquivo: CalculadoraRESMAT-mac-intel.zip
+    env:
+      PYTHONUTF8: "1"   # acentos e símbolos (δ, σ, τ) no terminal do Windows
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Instalar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar o Tk e a tela virtual (só Linux)
+        if: matrix.so == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xvfb
+
+      - name: Instalar bibliotecas
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Testes dos cálculos
+        run: python testes/testes_calculos.py
+
+      # ---------------------------- Windows ----------------------------------
+      - name: Gerar o .exe
+        if: matrix.so == 'windows'
+        run: python -m PyInstaller --noconfirm --onefile --windowed --name CalculadoraRESMAT main.py
+
+      - name: Teste rápido do .exe (abre, calcula e fecha)
+        if: matrix.so == 'windows'
+        shell: pwsh
+        run: |
+          $env:RESMAT_TESTE_RAPIDO = "1"
+          $p = Start-Process -FilePath "dist\CalculadoraRESMAT.exe" -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(180000)) {
+            $p.Kill()
+            Write-Error "O .exe nao fechou sozinho em 3 minutos."
+            exit 1
+          }
+          if (Test-Path resmat_teste.log) { Get-Content resmat_teste.log }
+          else { Write-Error "O .exe nao gerou o resmat_teste.log."; exit 1 }
+          if ($p.ExitCode -ne 0) { Write-Error "Codigo de saida: $($p.ExitCode)"; exit 1 }
+
+      # ----------------------------- Linux -----------------------------------
+      - name: Gerar o executável do Linux
+        if: matrix.so == 'linux'
+        run: |
+          python -m PyInstaller --noconfirm --onefile --name CalculadoraRESMAT main.py
+          # .tar.gz mantém a permissão de executar (o navegador perderia num arquivo solto)
+          tar -czf "dist/${{ matrix.arquivo }}" -C dist CalculadoraRESMAT
+
+      - name: Teste rápido do Linux (abre, calcula e fecha)
+        if: matrix.so == 'linux'
+        run: |
+          export RESMAT_TESTE_RAPIDO=1
+          timeout 180 xvfb-run -a ./dist/CalculadoraRESMAT
+          cat resmat_teste.log
+
+      # ----------------------------- macOS -----------------------------------
+      - name: Gerar o aplicativo do Mac (.app)
+        if: startsWith(matrix.so, 'mac')
+        run: |
+          python -m PyInstaller --noconfirm --windowed --name CalculadoraRESMAT main.py
+          # ditto preserva as permissões e a estrutura do .app dentro do .zip
+          ditto -c -k --sequesterRsrc --keepParent dist/CalculadoraRESMAT.app "dist/${{ matrix.arquivo }}"
+
+      - name: Teste rápido do Mac (abre, calcula e fecha)
+        if: startsWith(matrix.so, 'mac')
+        run: |
+          export RESMAT_TESTE_RAPIDO=1
+          ./dist/CalculadoraRESMAT.app/Contents/MacOS/CalculadoraRESMAT &
+          PID=$!
+          for i in $(seq 1 180); do
+            kill -0 $PID 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 $PID 2>/dev/null; then
+            kill $PID
+            echo "O app nao fechou sozinho em 3 minutos."
+            exit 1
+          fi
+          wait $PID
+          cat resmat_teste.log
+
+      - name: Guardar o arquivo (aba Actions > Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CalculadoraRESMAT-${{ matrix.so }}
+          path: dist/${{ matrix.arquivo }}
+          retention-days: 30
+
+  publicar:
+    name: publicar em Releases
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar os arquivos gerados
+        uses: actions/download-artifact@v4
+        with:
+          path: pacotes
+          merge-multiple: true
+
+      - name: Publicar em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l pacotes
+          cat > notas.md <<NOTAS
+          Gerado automaticamente a partir do commit ${GITHUB_SHA::7}.
+
+          | Seu computador | Baixe | Como abrir |
+          |---|---|---|
+          | Windows | \`CalculadoraRESMAT.exe\` | Dois cliques. Se aparecer "O Windows protegeu o computador": **Mais informações → Executar assim mesmo**. |
+          | Mac com chip M1, M2, M3, M4... | \`CalculadoraRESMAT-mac-apple-silicon.zip\` | Descompacte e abra o app. Veja o aviso do Mac no README. |
+          | Mac com processador Intel | \`CalculadoraRESMAT-mac-intel.zip\` | Igual ao anterior. |
+          | Linux | \`CalculadoraRESMAT-linux.tar.gz\` | \`tar -xzf CalculadoraRESMAT-linux.tar.gz\` e depois \`./CalculadoraRESMAT\`. |
+
+          Não sabe qual Mac tem? Menu da maçã → **Sobre Este Mac**: "Chip Apple M..." ou "Processador Intel".
+          NOTAS
+          gh release delete ultima-versao --yes --cleanup-tag || true
+          gh release create ultima-versao pacotes/* \
+            --target "$GITHUB_SHA" \
+            --title "Calculadora RESMAT (última versão)" \
+            --notes-file notas.md \
+            --latest

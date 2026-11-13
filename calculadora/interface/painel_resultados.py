@@ -96,9 +96,15 @@ class PainelResultados:
         self._linha("Barra CE:", f"{bB.alongamento * 1000:+.4f} mm ({self._alonga(bB.alongamento)})")
         self._linha("Deslocamento de B:", f"{r.desloc_B * 1000:+.4f} mm ({self._sobe(r.desloc_B)})")
         self._linha("Deslocamento de C:", f"{r.desloc_C * 1000:+.4f} mm ({self._sobe(r.desloc_C)})")
-        self._linha("Deslocamento de A (x=0):", f"{r.desloc_A * 1000:+.4f} mm")
-        self._linha("Flecha máxima (viga AC):",
-                    f"{r.deflexao_max * 1000:+.4f} mm em x = {r.x_deflexao_max * kL:.3f} {u_L}")
+        self._linha("Deslocamento de A (x=0):",
+                    f"{r.desloc_A * 1000:+.4f} mm ({self._sobe(r.desloc_A)})  [viga rígida]")
+        if abs(d.xP) > 1e-9:
+            self._linha("Deslocamento sob P:",
+                        f"{r.desloc_P * 1000:+.4f} mm ({self._sobe(r.desloc_P)})  [viga rígida]")
+        self._linha("Rotação da viga:", f"{r.rotacao * 1000:+.4f} mrad  "
+                                        f"({'anti-horário' if r.rotacao > 0 else 'horário' if r.rotacao < 0 else 'sem rotação'})")
+        self._linha("Flexão da viga (ignorada):",
+                    f"até {r.flexao_extra_max * 1000:.4f} mm  (hipótese de viga rígida)")
         self._separador()
 
         # ---- Flexão -------------------------------------------------------

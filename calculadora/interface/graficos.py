@@ -1,5 +1,5 @@
 # ==============================================================================
-# GRÁFICOS: DEN, DEC, DMF, tensão de flexão e linha elástica (matplotlib)
+# GRÁFICOS: DEN, DEC, DMF, tensão de flexão e deformação (viga rígida) (matplotlib)
 # ==============================================================================
 import tkinter as tk
 
@@ -93,33 +93,45 @@ def desenhar_diagramas(axes, d, r, unidades):
     eixo_y(axes[3], f"σ ({UNIDADE_TENSAO})")
     titulo(axes[3], "Tensão de Flexão Máxima")
 
-    # 5) Linha elástica (sempre em mm)
+    # 5) Deformação com VIGA RÍGIDA (sempre em mm), como no desenho do professor:
+    #    as barras deslocam B e C; a viga é uma reta que passa por B' e C'.
     ax = axes[4]
-    v = r.deflexao * 1000
-    ax.plot(x, v, color=CORES["vermelho"], linewidth=2)
-    ax.fill_between(x, v, color=CORES["vermelho"], alpha=0.15)
-    # Pontos B e C (onde as barras seguram a viga)
-    ax.plot([d.xB * kL, d.xC * kL], [r.desloc_B * 1000, r.desloc_C * 1000], "o",
-            color=CORES["amarelo"], markersize=5)
+    v = r.deflexao_rigida * 1000
+    ax.plot(x, np.zeros_like(x), color=CORES["texto_suave"], linewidth=1.4,
+            linestyle=(0, (5, 4)), label="Posição original")
+    ax.plot(x, v, color=CORES["vermelho"], linewidth=2.2, label="Viga deformada (rígida)")
 
-    # Flecha máxima marcada no gráfico
-    x_max, v_max = r.x_deflexao_max * kL, r.deflexao_max * 1000
-    ax.plot([x_max], [v_max], "o", color=CORES["vermelho"], markersize=5)
-    perto_da_direita = x_max > 0.6 * x[-1]
-    ax.annotate(f"δmáx = {v_max:.3f} mm", (x_max, v_max),
-                xytext=(-8 if perto_da_direita else 8, -12 if v_max < 0 else 8),
-                textcoords="offset points", ha="right" if perto_da_direita else "left",
-                color=CORES["texto"], fontsize=8)
+    # Cotas: δ de cada ponto, medido na vertical a partir da posição original
+    pontos = [("A", 0.0, r.desloc_A, CORES["vermelho"]),
+              ("B", d.xB, r.desloc_B, CORES["laranja"]),
+              ("C", d.xC, r.desloc_C, CORES["verde"])]
+    if all(abs(d.xP - xp) > 1e-9 for _, xp, _, _ in pontos):
+        pontos.append(("P", d.xP, r.desloc_P, CORES["azul"]))
+    pico = max(abs(dv) * 1000 for _, _, dv, _ in pontos) or 1e-3
+    for nome, xp, dv, cor in pontos:
+        dv_mm = dv * 1000
+        ax.plot([xp * kL], [dv_mm], "o", color=cor, markersize=6, zorder=5)
+        if abs(dv_mm) > 1e-9 * max(pico, 1.0):
+            ax.annotate("", (xp * kL, dv_mm), (xp * kL, 0.0),
+                        arrowprops=dict(arrowstyle="<->", color=cor, linewidth=1.2,
+                                        shrinkA=0, shrinkB=0))
+        sentido = "↑" if dv_mm > 0 else ("↓" if dv_mm < 0 else "")
+        ax.annotate(f"δ{nome} = {dv_mm:+.3f} mm {sentido}", (xp * kL, dv_mm),
+                    xytext=(6, 8 if dv_mm >= 0 else -14), textcoords="offset points",
+                    ha="left" if xp * kL < 0.7 * x[-1] else "right",
+                    color=cor, fontsize=8, fontweight="bold")
 
-    # Eixo y sempre incluindo o zero (posição original da viga)
+    # Eixo y sempre incluindo o zero (posição original da viga) e folga para os textos
     todos = np.concatenate([v, [0.0]])
     lo, hi = float(todos.min()), float(todos.max())
-    folga = max((hi - lo) * 0.15, 1e-3)
+    folga = max((hi - lo) * 0.25, 1e-3)
     ax.set_ylim(lo - folga, hi + folga)
+    ax.legend(loc="best", fontsize=7, facecolor=CORES["painel"], edgecolor=CORES["separador"],
+              labelcolor=CORES["texto"])
 
-    eixo_y(ax, "δ (mm)")
+    eixo_y(ax, "δ (mm)  + sobe / − desce")
     ax.set_xlabel(f"Posição x ({u_L})", fontsize=8, color=CORES["texto"])
-    titulo(ax, "Linha Elástica (Deformação da Viga)")
+    titulo(ax, "Deformação da Viga (viga rígida: δB e δC vêm do alongamento das barras)")
 
     axes[-1].set_xlim(x[0], x[-1])
 

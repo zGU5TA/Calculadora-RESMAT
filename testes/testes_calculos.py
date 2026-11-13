@@ -75,15 +75,36 @@ def teste_sinal_barra_CE():
 
 
 def teste_balanco():
-    # Ponta em balanço: flecha de flexão = P a² (a + l) / (3 E I)
+    # Viga FLEXÍVEL em balanço: flecha de flexão = P a² (a + l) / (3 E I)
     d = dados()
     r = calc.calcular(d)
     a, l = d.xB, d.xC - d.xB
     EI = ACO.E * d.secao_viga.inercia
     flexao = d.P * a ** 2 * (a + l) / (3 * EI)
     rigida = r.desloc_B + (r.desloc_C - r.desloc_B) * (0 - d.xB) / (d.xC - d.xB)
-    assert perto(r.desloc_A, rigida - flexao, 1e-9)
-    print(f"OK  balanço: δ_A = {r.desloc_A * 1000:.4f} mm (fórmula: {(rigida - flexao) * 1000:.4f} mm)")
+    assert perto(r.deflexao[0], rigida - flexao, 1e-9)         # referência flexível
+    assert perto(r.desloc_A, rigida, 1e-9)                      # viga rígida (professor)
+    print(f"OK  balanço: flexível δ_A = {r.deflexao[0] * 1000:.4f} mm "
+          f"(fórmula: {(rigida - flexao) * 1000:.4f} mm); rígida δ_A = {r.desloc_A * 1000:.4f} mm")
+
+
+def teste_viga_rigida():
+    # Desenho do professor: reta por B' e C'; δA por semelhança de triângulos
+    d = dados()
+    r = calc.calcular(d)
+    assert perto(r.desloc_B, -r.barraA.alongamento) and perto(r.desloc_C, r.barraB.alongamento)
+    for xi, vi in ((d.xB, r.desloc_B), (d.xC, r.desloc_C), (0.0, r.desloc_A), (d.xP, r.desloc_P)):
+        assert perto(float(np.interp(xi, r.x, r.deflexao_rigida)), vi, 1e-9)
+    # semelhança de triângulos: (δC - δB)/(xC - xB) = (δB - δA)/(xB - xA)
+    assert perto((r.desloc_C - r.desloc_B) / (d.xC - d.xB),
+                 (r.desloc_B - r.desloc_A) / (d.xB - 0.0), 1e-9)
+    # a viga rígida é uma reta: diferenças de inclinação nulas
+    inclin = np.diff(r.deflexao_rigida) / np.maximum(np.diff(r.x), 1e-12)
+    assert np.allclose(inclin[np.diff(r.x) > 0], r.rotacao, rtol=1e-6, atol=1e-12)
+    # barras iguais e viga bem rígida: a flexão ignorada é pequena perto dos deslocamentos
+    assert r.flexao_extra_max >= 0
+    print(f"OK  viga rígida: δA = {r.desloc_A * 1000:+.4f} mm, δB = {r.desloc_B * 1000:+.4f} mm, "
+          f"δC = {r.desloc_C * 1000:+.4f} mm (reta por B' e C')")
 
 
 def teste_biapoiada():
@@ -183,6 +204,9 @@ def teste_caso_de_teste_manual():
         ("Tensão de flexão máxima", "MPa", r.sigma_flex_max / 1e6, esp["sigma_flexao_MPa"]),
         ("Alongamento barra A", "mm", r.barraA.alongamento * 1e3, esp["alongamento_barraA_mm"]),
         ("Alongamento barra B", "mm", r.barraB.alongamento * 1e3, esp["alongamento_barraB_mm"]),
+        ("Deslocamento de B (rígida)", "mm", r.desloc_B * 1e3, esp["desloc_B_mm"]),
+        ("Deslocamento de C (rígida)", "mm", r.desloc_C * 1e3, esp["desloc_C_mm"]),
+        ("Deslocamento de A (rígida)", "mm", r.desloc_A * 1e3, esp["desloc_A_mm_viga_rigida"]),
     ]
     print("\n  CASO DE TESTE (programa x cálculo manual)")
     print(f"  {'Grandeza':<32}{'Programa':>12}{'Manual':>12}{'Dif. abs.':>12}{'Dif. %':>9}")
@@ -203,6 +227,7 @@ if __name__ == "__main__":
     teste_equilibrio()
     teste_sinal_barra_CE()
     teste_balanco()
+    teste_viga_rigida()
     teste_biapoiada()
     teste_barra_A_depois_da_barra_B()
     teste_pinos()
