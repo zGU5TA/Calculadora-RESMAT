@@ -101,20 +101,16 @@ class ResmatCalculatorApp(tk.Tk):
         tk.Label(cab, text="A3 RESMAT I — CALCULADORA ESTRUTURAL", font=("Helvetica", 12, "bold"),
                  fg=CORES["texto"], bg=CORES["painel"]).pack(side=tk.LEFT, padx=10)
         self._botao(cab, "📋 Resultados", lambda: self._alternar("dir")).pack(side=tk.RIGHT, padx=8)
-        mb = tk.Menubutton(cab, text="💾 Exportar ▾", bg=CORES["botao"], fg=CORES["texto"],
-                           activebackground=CORES["botao_ativo"], activeforeground=CORES["texto"],
-                           relief="flat", font=("Helvetica", 10, "bold"), padx=10, pady=3)
-        menu = tk.Menu(mb, tearoff=0, bg=CORES["painel"], fg=CORES["texto"],
-                       activebackground=CORES["campo"], activeforeground=CORES["texto"])
-        menu.add_command(label="Diagramas DEIS (PNG)…", command=lambda: self.exportar("deis"))
-        menu.add_command(label="Estrutura deformada (PNG)…", command=lambda: self.exportar("def"))
-        menu.add_command(label="Resultados (CSV para Excel)…", command=lambda: self.exportar("csv_res"))
-        menu.add_command(label="Pontos dos diagramas (CSV)…", command=lambda: self.exportar("csv_diag"))
-        menu.add_command(label="Memória de cálculo (TXT)…", command=lambda: self.exportar("txt"))
-        menu.add_separator()
-        menu.add_command(label="Tudo em uma pasta…", command=lambda: self.exportar("tudo"))
-        mb.config(menu=menu)
-        mb.pack(side=tk.RIGHT, padx=4)
+        # Faixa de exportação (aparece ao clicar em "Exportar"; sem menus nativos)
+        self._faixa_exportar = tk.Frame(self, bg=CORES["campo"])
+        for texto, tipo in (("Diagramas PNG", "deis"), ("Deformada PNG", "def"),
+                            ("Resultados CSV", "csv_res"), ("Pontos CSV", "csv_diag"),
+                            ("Memória TXT", "txt"), ("Tudo numa pasta", "tudo")):
+            self._botao(self._faixa_exportar, texto,
+                        lambda t=tipo: self.exportar(t)).pack(side=tk.LEFT, padx=4, pady=4)
+        self._exportar_aberto = False
+        self._botao(cab, "💾 Exportar", self._alternar_exportar).pack(side=tk.RIGHT, padx=4)
+        self._cab = cab
 
         corpo = tk.Frame(self, bg=CORES["fundo"])
         corpo.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
@@ -143,6 +139,13 @@ class ResmatCalculatorApp(tk.Tk):
         self.deformada = GraficoDeformada(quadros["def"])
         self.memoria = MemoriaView(quadros["mem"])
         self.resultados = PainelResultados(self.dir)
+
+    def _alternar_exportar(self):
+        self._exportar_aberto = not self._exportar_aberto
+        if self._exportar_aberto:
+            self._faixa_exportar.pack(fill=tk.X, after=self._cab)
+        else:
+            self._faixa_exportar.pack_forget()
 
     def _empacotar(self):
         for f in (self.esq, self.dir, self.centro):
