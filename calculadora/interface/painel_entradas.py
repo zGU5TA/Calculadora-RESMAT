@@ -327,12 +327,22 @@ class PainelEntradas:
 
     @staticmethod
     def _criar_area_rolavel(parent):
-        canvas = tk.Canvas(parent, bg=CORES["painel"], highlightthickness=0, width=360)
+        canvas = tk.Canvas(parent, bg=CORES["painel"], highlightthickness=0, width=330)
         barra = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         quadro = tk.Frame(canvas, bg=CORES["painel"])
         quadro.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=quadro, anchor="nw")
         canvas.configure(yscrollcommand=barra.set)
+
+        def rolar(ev):                      # roda do mouse (Windows/Mac/Linux)
+            passo = -1 if (ev.num == 4 or ev.delta > 0) else 1
+            canvas.yview_scroll(passo, "units")
+        canvas.bind("<Enter>", lambda e: (canvas.bind_all("<MouseWheel>", rolar),
+                                          canvas.bind_all("<Button-4>", rolar),
+                                          canvas.bind_all("<Button-5>", rolar)))
+        canvas.bind("<Leave>", lambda e: (canvas.unbind_all("<MouseWheel>"),
+                                          canvas.unbind_all("<Button-4>"),
+                                          canvas.unbind_all("<Button-5>")))
         canvas.pack(side="left", fill="both", expand=True)
         barra.pack(side="right", fill="y")
         return quadro

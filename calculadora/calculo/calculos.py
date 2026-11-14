@@ -6,7 +6,18 @@ import math
 import numpy as np
 
 from calculadora.calculo.modelos import (DadosEntrada, ResultadoBarra,
-                                         ResultadoLigacao, Resultados)
+                                         ResultadoFlambagem, ResultadoLigacao,
+                                         Resultados, Verificacao)
+
+# Coeficiente de segurança (FS = o que o material aguenta / o que está atuando):
+#   FS >= FS_ATENCAO        -> SEGURO   (verde)
+#   1 <= FS < FS_ATENCAO    -> ATENÇÃO  (amarelo: passa, mas com margem pequena)
+#   FS < 1                  -> FALHA    (vermelho)
+# 1,5 é só uma margem de aviso; troque aqui se o professor pedir outro valor.
+FS_ATENCAO = 1.5
+
+# Fator de comprimento efetivo da flambagem: barra articulada nas duas pontas (pinos).
+K_FLAMBAGEM = 1.0
 
 
 class CalculadoraEstrutural:
@@ -98,8 +109,10 @@ class CalculadoraEstrutural:
         delta_A = N_A * d.LA / (d.mat_barraA.E * A_A)   # + alonga
         delta_B = N_B * d.LB / (d.mat_barraB.E * A_B)
 
-        barraA = ResultadoBarra("BARRA A (BD)", N_A, N_A / A_A, delta_A, d.mat_barraA)
-        barraB = ResultadoBarra("BARRA B (CE)", N_B, N_B / A_B, delta_B, d.mat_barraB)
+        barraA = ResultadoBarra("BARRA A (BD)", N_A, N_A / A_A, delta_A, d.mat_barraA,
+                                self._flambagem(d.secao_barraA, d.LA, d.mat_barraA, N_A))
+        barraB = ResultadoBarra("BARRA B (CE)", N_B, N_B / A_B, delta_B, d.mat_barraB,
+                                self._flambagem(d.secao_barraB, d.LB, d.mat_barraB, N_B))
 
         # Deslocamento vertical dos pontos B e C (+ para cima)
         #   D está fixo em cima: se BD alonga, B desce
@@ -157,6 +170,38 @@ class CalculadoraEstrutural:
         i_s = int(np.argmax(sigma_flex))
         i_d = int(np.argmax(np.abs(deflexao)))
 
+        # 7) Verificações de segurança (coeficiente de segurança de cada item)
+        verificacoes = []
+        for chave, nome, barra, mat in (("barraA", "Barra A (BD)", barraA, d.mat_barraA),
+                                        ("barraB", "Barra B (CE)", barraB, d.mat_barraB)):
+            verificacoes.append(self._verificacao(
+                f"{chave}_escoamento", f"{nome} — escoamento", "tensao",
+                "σ", abs(barra.tensao), "σ_esc", mat.sigma_y, "ESCOAMENTO"))
+            if barra.flambagem is not None:
+                fl = barra.flambagem
+                verificacoes.append(self._verificacao(
+                    f"{chave}_flambagem", f"{nome} — flambagem", "forca",
+                    "N", fl.carga_aplicada, "P_cr", fl.carga_critica, "FLAMBAGEM"))
+        for chave, nome, pino, lig in (("pinoB", "Pino/rebite B", pinoB, d.lig_B),
+                                       ("pinoC", "Pino/rebite C", pinoC, d.lig_C)):
+            verificacoes.append(self._verificacao(
+                f"{chave}_cisalhamento", f"{nome} — cisalhamento", "tensao",
+                "τ", pino.tau, "τ_adm", lig.material.tau_adm, "FALHA"))
+        verificacoes.append(self._verificacao(
+            "viga_flexao", "Viga AC — flexão", "tensao",
+            "σ", float(sigma_flex[i_s]), "σ_esc", d.mat_viga.sigma_y, "ESCOAMENTO"))
+
+        fs_validos = [v.fs for v in verificacoes if v.fs is not None and math.isfinite(v.fs)]
+        niveis = {v.nivel for v in verificacoes}
+        if "falha" in niveis:
+            nivel_geral = "falha"
+        elif "atencao" in niveis:
+            nivel_geral = "atencao"
+        elif niveis == {"sem_limite"}:
+            nivel_geral = "sem_limite"
+        else:
+            nivel_geral = "ok"
+
         return Resultados(
             FA=FA, FB=FB,
             barraA=barraA, barraB=barraB,
@@ -169,7 +214,54 @@ class CalculadoraEstrutural:
             deflexao_max=deflexao[i_d], x_deflexao_max=x[i_d],
             desloc_B=v_B, desloc_C=v_C, desloc_A=desloc_A, desloc_P=desloc_P,
             rotacao=rotacao, flexao_extra_max=flexao_extra_max,
+            verificacoes=verificacoes,
+            fs_minimo=min(fs_validos) if fs_validos else None,
+            nivel_geral=nivel_geral,
         )
+
+    # --------------------------------------------------------------------------
+    @staticmethod
+    def _verificacao(chave, titulo, grandeza, simbolo_valor, valor, simbolo_limite,
+                     limite, rotulo_falha) -> Verificacao:
+        """Compara valor x limite e define o coeficiente de segurança e a cor."""
+        if limite is None or limite <= 0:
+            fs, nivel = None, "sem_limite"
+        elif valor <= 0:
+            fs, nivel = math.inf, "ok"          # nada atuando: sem risco
+        else:
+            fs = limite / valor
+            nivel = "ok" if fs >= FS_ATENCAO else ("atencao" if fs >= 1.0 else "falha")
+        return Verificacao(chave, titulo, grandeza, simbolo_valor, valor, simbolo_limite,
+                           limite, rotulo_falha, fs, nivel)
+
+    @staticmethod
+    def _flambagem(secao, L, mat, N):
+        """Flambagem de uma barra comprimida (N < 0); devolve None se não está comprimida.
+
+        Esbeltez:        λ  = Le / r,  com  Le = K·L  e  r = √(I_min / A)
+        Esbeltez limite: λc = π·√(2E/σ_esc)
+        λ >= λc  -> Euler:    σ_cr = π²·E / λ²
+        λ <  λc  -> Johnson:  σ_cr = σ_esc·[1 − σ_esc·λ² / (4·π²·E)]   (coluna intermediária)
+        P_cr = σ_cr·A   e   FS = P_cr / |N|
+        """
+        if N >= 0:
+            return None
+        A = secao.area
+        I = secao.inercia_min
+        Le = K_FLAMBAGEM * L
+        r = math.sqrt(I / A)
+        lam = Le / r
+        E, sy = mat.E, mat.sigma_y
+        lam_c = math.pi * math.sqrt(2 * E / sy) if sy else None
+        if lam_c is None or lam >= lam_c:
+            regime = "Euler"
+            sigma_cr = math.pi ** 2 * E / lam ** 2
+        else:
+            regime = "Johnson"
+            sigma_cr = sy * (1 - sy * lam ** 2 / (4 * math.pi ** 2 * E))
+        P_cr = sigma_cr * A
+        return ResultadoFlambagem(Le, I, r, lam, lam_c, regime, sigma_cr, P_cr,
+                                  abs(N), P_cr / abs(N))
 
     # --------------------------------------------------------------------------
     def _malha(self, L, posicoes):

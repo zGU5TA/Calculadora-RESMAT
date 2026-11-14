@@ -8,7 +8,7 @@ from calculadora.calculo.dados import UNIDADE_TENSAO, UNITS
 from calculadora.interface.tema import CORES
 
 LARGURA_ROTULO = 30
-SEPARADOR = "-" * 56 + "\n"
+SEPARADOR = "-" * 50 + "\n"
 
 
 class PainelResultados:
@@ -24,7 +24,7 @@ class PainelResultados:
 
         self.texto = tk.Text(quadro, bg=CORES["fundo"], fg=CORES["texto"], font=("Consolas", 10),
                              wrap=tk.WORD, yscrollcommand=barra.set, borderwidth=0,
-                             state=tk.DISABLED, width=58)
+                             state=tk.DISABLED, width=52)
         self.texto.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         barra.config(command=self.texto.yview)
 
@@ -37,6 +37,10 @@ class PainelResultados:
         t.tag_config("alerta", foreground=CORES["vermelho"], font=("Consolas", 10, "bold"))
         t.tag_config("aviso", foreground=CORES["laranja"], font=("Consolas", 10, "italic"))
         t.tag_config("separador", foreground=CORES["separador"])
+        for nivel, fundo in (("ok", CORES["card_ok"]), ("atencao", CORES["card_atencao"]),
+                             ("falha", CORES["card_falha"])):
+            t.tag_config("card_" + nivel, background=fundo, foreground=CORES["texto"],
+                         font=("Consolas", 10, "bold"), lmargin1=6, lmargin2=6, spacing1=2, spacing3=2)
 
     # --------------------------------------------------------------------------
     def mostrar(self, d, r, unidades):
@@ -47,6 +51,24 @@ class PainelResultados:
         uS = UNIDADE_TENSAO
 
         self._comecar()
+
+        # ---- Resumo de segurança (cartões coloridos) ---------------------------
+        self._titulo("▶ COEFICIENTES DE SEGURANÇA (FS)")
+        geral = {"ok": ("✅ ESTRUTURA SEGURA", "ok"), "atencao": ("⚠ ATENÇÃO: FS baixo", "atencao"),
+                 "falha": ("❌ HÁ FALHA", "falha"), "sem_limite": ("— sem limites informados", "atencao")}
+        txt, nv = geral[r.nivel_geral]
+        fs_min = "∞" if r.fs_minimo is None or r.fs_minimo == float("inf") else f"{r.fs_minimo:.2f}"
+        self.texto.insert(tk.END, f"{txt}   (menor FS = {fs_min})\n", "card_" + nv)
+        for v in r.verificacoes:
+            if v.fs is None:
+                self.texto.insert(tk.END, f" {v.titulo}: sem limite informado\n", "card_atencao")
+                continue
+            fs = "∞" if v.fs == float("inf") else f"{v.fs:.2f}"
+            marca = {"ok": "✅", "atencao": "⚠", "falha": "❌"}[v.nivel]
+            self.texto.insert(tk.END, f" {marca} {v.titulo}: FS = {fs}  ({v.utilizacao * 100:.0f}% do limite)\n",
+                              "card_" + v.nivel)
+        self.texto.insert(tk.END, "  verde: FS ≥ 1,5 · amarelo: 1 ≤ FS < 1,5 · vermelho: FS < 1\n", "aviso")
+        self._separador()
 
         # ---- Equilíbrio ---------------------------------------------------
         self._titulo("▶ EQUILÍBRIO ESTRUTURAL")
@@ -72,6 +94,11 @@ class PainelResultados:
             self._linha("  Tensão normal (σ):", f"{abs(barra.tensao) * kS:.2f} {uS}")
             self._verificar("  Limite (σ_esc):", "  Status:", abs(barra.tensao),
                             barra.material.sigma_y, kS, uS, "ESCOAMENTO", "σ_esc")
+            fl = barra.flambagem
+            if fl is not None:
+                self._linha("  Flambagem (comprimida):", f"{fl.regime}, λ = {fl.esbeltez:.1f}")
+                self._linha("  Carga crítica P_cr:", f"{fl.carga_critica * kF:.2f} {u_F}  (FS = {fl.fs:.2f})",
+                            "ok" if fl.fs >= 1 else "alerta")
         self._separador()
 
         # ---- Pinos / rebites ---------------------------------------------

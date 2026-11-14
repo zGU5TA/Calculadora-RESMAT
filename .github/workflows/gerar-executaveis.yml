@@ -55,13 +55,33 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
-      - name: Testes dos cálculos
-        run: python testes/testes_calculos.py
+      - name: Testes dos cálculos e das saídas (memória, CSV, PNG, gráficos)
+        run: |
+          python testes/testes_calculos.py
+          python testes/testes_saidas.py
+
+      - name: Capturas de tela da interface (só Linux, tela pequena 1366x768)
+        if: matrix.so == 'linux'
+        run: |
+          mkdir -p capturas
+          RESMAT_TESTE_RAPIDO=1 RESMAT_CAPTURAS="$PWD/capturas" \
+            timeout 180 xvfb-run -a -s "-screen 0 1366x768x24" python main.py
+          cat resmat_teste.log
+          ls -l capturas
+
+      - name: Guardar as capturas de tela
+        if: matrix.so == 'linux' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-de-tela
+          path: capturas
+          retention-days: 14
+          if-no-files-found: ignore
 
       # ---------------------------- Windows ----------------------------------
       - name: Gerar o .exe
         if: matrix.so == 'windows'
-        run: python -m PyInstaller --noconfirm --onefile --windowed --name CalculadoraRESMAT main.py
+        run: python -m PyInstaller --noconfirm --onefile --windowed --icon assets/icone.ico --name CalculadoraRESMAT main.py
 
       - name: Teste rápido do .exe (abre, calcula e fecha)
         if: matrix.so == 'windows'
@@ -98,7 +118,7 @@ jobs:
       - name: Gerar o aplicativo do Mac (.app)
         if: startsWith(matrix.so, 'mac')
         run: |
-          python -m PyInstaller --noconfirm --windowed --name CalculadoraRESMAT main.py
+          python -m PyInstaller --noconfirm --windowed --icon assets/icone.icns --name CalculadoraRESMAT main.py
           # ditto preserva as permissões e a estrutura do .app dentro do .zip
           ditto -c -k --sequesterRsrc --keepParent dist/CalculadoraRESMAT.app "dist/${{ matrix.arquivo }}"
 

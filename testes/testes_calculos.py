@@ -159,6 +159,69 @@ def teste_esforco_normal_e_posicoes_dos_maximos():
     print("OK  N(x) = 0 e posições de V, M e σ máximos")
 
 
+def teste_flambagem():
+    # P entre as barras (xP = 1,2 m): a barra B (CE) fica COMPRIMIDA
+    r = calc.calcular(dados(P=20e3, xP=1.2))
+    assert r.barraA.flambagem is None                      # barra A tracionada: não flamba
+    fl = r.barraB.flambagem
+    assert fl is not None and r.barraB.estado == "COMPRESSÃO"
+    # Conta à mão: d = 20 mm, L = 1 m, A36 (E = 200 GPa), articulada nas duas pontas
+    I = math.pi * 0.02 ** 4 / 64
+    P_cr = math.pi ** 2 * 200e9 * I / 1.0 ** 2
+    assert fl.regime == "Euler" and perto(fl.esbeltez, 200.0)
+    assert perto(fl.carga_critica, P_cr), (fl.carga_critica, P_cr)
+    assert perto(fl.fs, P_cr / (20e3 * (1.2 - 0.8) / (2.0 - 0.8)))   # N_B = F_B = P·(xP−xB)/(xC−xB)
+    assert any(v.chave == "barraB_flambagem" for v in r.verificacoes)
+
+    # Barra curta e grossa: λ < λc  ->  parábola de Johnson (e não Euler)
+    r2 = calc.calcular(dados(P=20e3, xP=1.2, LB=0.3,
+                             secao_barraB=Secao("Circular", d=0.06)))
+    fl2 = r2.barraB.flambagem
+    assert fl2.regime == "Johnson" and fl2.esbeltez < fl2.esbeltez_limite
+    sy, E = 250e6, 200e9
+    assert perto(fl2.tensao_critica, sy * (1 - sy * fl2.esbeltez ** 2 / (4 * math.pi ** 2 * E)))
+    assert fl2.tensao_critica < sy                          # nunca passa do escoamento
+
+    # Seção retangular: flamba em torno do eixo de MENOR inércia
+    s = Secao("Retangular", b=0.01, h=0.03)
+    assert perto(s.inercia_min, 0.03 * 0.01 ** 3 / 12)
+    print(f"OK  flambagem: Euler P_cr = {P_cr / 1e3:.3f} kN (FS = {fl.fs:.3f}) e Johnson")
+
+
+def teste_coeficientes_de_seguranca():
+    # Mesmo caso do JSON: P = 20 kN, pinos de 16 mm (com pinos de 12 mm o pino B falharia)
+    pinos16 = dict(lig_B=Ligacao(0.016, 2, ACO), lig_C=Ligacao(0.016, 2, ACO))
+    r = calc.calcular(dados(P=20e3, **pinos16))
+    por = {v.chave: v for v in r.verificacoes}
+    esperado = {"barraA_escoamento": 250e6 / abs(r.barraA.tensao),
+                "barraB_escoamento": 250e6 / abs(r.barraB.tensao),
+                "pinoB_cisalhamento": 145e6 / r.pinoB.tau,
+                "pinoC_cisalhamento": 145e6 / r.pinoC.tau,
+                "viga_flexao": 250e6 / r.sigma_flex_max}
+    for chave, fs in esperado.items():
+        assert perto(por[chave].fs, fs), chave
+    assert perto(r.fs_minimo, min(esperado.values()))
+    assert perto(por["viga_flexao"].utilizacao, 1 / por["viga_flexao"].fs)
+
+    # Níveis: FS >= 1,5 verde; 1 <= FS < 1,5 amarelo; FS < 1 vermelho
+    assert por["barraA_escoamento"].nivel == "ok"
+    assert por["viga_flexao"].nivel == "atencao"      # σ = 192 MPa, FS = 1,30
+    assert r.nivel_geral == "atencao"
+    r_falha = calc.calcular(dados(P=100e3))             # barra A passa do escoamento
+    assert {v.chave: v.nivel for v in r_falha.verificacoes}["barraA_escoamento"] == "falha"
+    assert r_falha.nivel_geral == "falha"
+    r_ok = calc.calcular(dados(P=5e3))
+    assert r_ok.nivel_geral == "ok"
+
+    # Sem σ_esc informado: não verifica, em vez de inventar um limite
+    r_sem = calc.calcular(dados(P=20e3, mat_barraA=Material("Personalizado", E=200e9)))
+    assert {v.chave: v.nivel for v in r_sem.verificacoes}["barraA_escoamento"] == "sem_limite"
+    # Sem carga atuando numa barra (P = 0): FS infinito e "ok"
+    r_zero = calc.calcular(dados(P=0.0))
+    assert all(v.nivel == "ok" for v in r_zero.verificacoes)
+    print(f"OK  coeficientes de segurança (menor FS = {r.fs_minimo:.3f} na flexão da viga)")
+
+
 def teste_validacao():
     assert calc.validar(dados(xP=3.0))                 # P fora da viga
     assert calc.validar(dados(xB=1.0, xC=1.0))         # barras na mesma posição
@@ -189,6 +252,7 @@ def teste_caso_de_teste_manual():
     assert not calc.validar(d)
     r = calc.calcular(d)
 
+    fs = {v.chave: v.fs for v in r.verificacoes}
     linhas = [  # (nome, unidade, valor do programa, valor manual)
         ("Força da barra A na viga (FA)", "kN", r.FA / 1e3, esp["FA_kN"]),
         ("Força da barra B na viga (FB)", "kN", r.FB / 1e3, esp["FB_kN"]),
@@ -207,6 +271,11 @@ def teste_caso_de_teste_manual():
         ("Deslocamento de B (rígida)", "mm", r.desloc_B * 1e3, esp["desloc_B_mm"]),
         ("Deslocamento de C (rígida)", "mm", r.desloc_C * 1e3, esp["desloc_C_mm"]),
         ("Deslocamento de A (rígida)", "mm", r.desloc_A * 1e3, esp["desloc_A_mm_viga_rigida"]),
+        ("FS barra A (escoamento)", "", fs["barraA_escoamento"], esp["FS_barraA_escoamento"]),
+        ("FS barra B (escoamento)", "", fs["barraB_escoamento"], esp["FS_barraB_escoamento"]),
+        ("FS pino B", "", fs["pinoB_cisalhamento"], esp["FS_pinoB"]),
+        ("FS pino C", "", fs["pinoC_cisalhamento"], esp["FS_pinoC"]),
+        ("FS viga (flexão)", "", fs["viga_flexao"], esp["FS_viga_flexao"]),
     ]
     print("\n  CASO DE TESTE (programa x cálculo manual)")
     print(f"  {'Grandeza':<32}{'Programa':>12}{'Manual':>12}{'Dif. abs.':>12}{'Dif. %':>9}")
@@ -233,6 +302,8 @@ if __name__ == "__main__":
     teste_pinos()
     teste_varios_pinos()
     teste_esforco_normal_e_posicoes_dos_maximos()
+    teste_flambagem()
+    teste_coeficientes_de_seguranca()
     teste_validacao()
     teste_caso_de_teste_manual()
     print("\nTodos os testes passaram.")

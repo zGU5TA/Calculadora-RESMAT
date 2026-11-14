@@ -42,16 +42,25 @@ calculadora/
   calculo/                  só matemática (não usa tkinter)
     dados.py                materiais e unidades
     modelos.py              Secao, Material, Ligacao, DadosEntrada, Resultados
-    calculos.py             CalculadoraEstrutural (equilíbrio, tensões, diagramas, deformação da viga rígida)
+    calculos.py             CalculadoraEstrutural (equilíbrio, tensões, diagramas, deformação da viga rígida, flambagem, FS)
+    memoria.py              memória de cálculo (passo a passo com as equações)
+    exportacao.py           tabelas e CSV/TXT
   interface/                parte visual (tkinter + matplotlib)
     app.py                  ResmatCalculatorApp: monta a janela e liga tudo
-    painel_entradas.py      coluna da esquerda (campos, unidades, materiais)
+    painel_entradas.py      barra lateral de variáveis (campos, unidades, materiais)
     esquema.py              desenho da estrutura com cotas
-    graficos.py             DEN, DEC, DMF, tensão de flexão e deformação (viga rígida)
-    painel_resultados.py    coluna da direita (resultados)
-    tema.py                 cores
+    diagramas.py            DEN, DEC, DMF, tensão, deformação, leitor do mouse e estrutura deformada (sem tkinter)
+    graficos.py             abas de gráficos dentro da janela
+    memoria_view.py         aba "Memória de cálculo"
+    painel_resultados.py    painel de resultados (com cartões de FS coloridos)
+    saidas.py               exportação em PNG/CSV/TXT
+    tema.py                 cores (paleta do dashboard)
+    icone_dados.py          ícone da janela (gerado)
+assets/                     logo original e ícones (.ico, .icns, .png)
+ferramentas/gerar_icones.py refaz os ícones a partir de assets/logo_original.png
 testes/
   testes_calculos.py        confere os cálculos com fórmulas conhecidas e com o caso manual
+  testes_saidas.py          confere memória, CSV, PNG, leitor do mouse e deformada
   caso_de_teste.json        dados do caso de teste e resultados calculados à mão
 .github/workflows/
   gerar-executaveis.yml     gera os executáveis (Windows, Linux e Mac) automaticamente no GitHub
@@ -80,9 +89,36 @@ ligação), tudo em aço A36 (E = 200 GPa).
 | δ barra B | 13 333·1 / (200e9·π·0,01²) | 0,2122 mm |
 | δB (viga rígida) | a barra BD alonga e B desce | −0,5305 mm (↓) |
 | δC (viga rígida) | a barra CE alonga e C sobe | +0,2122 mm (↑) |
+| FS barra A | σ_esc/σ = 250/106,10 | 2,356 |
+| FS barra B | 250/42,44 | 5,891 |
+| FS pino B | τ_adm/τ = 145/82,89 | 1,749 |
+| FS pino C | 145/33,16 | 4,373 |
+| FS viga (flexão) | 250/192 | 1,302 |
 | δA (viga rígida) | semelhança de triângulos: δB + (δC − δB)·(0 − x_B)/(x_C − x_B) | −1,0257 mm (↓) |
 
 N(x) = 0 em toda a viga, pois todas as forças que atuam nela são verticais.
+
+## Telas e recursos
+
+- **Barra lateral de variáveis** (botão ☰): recolhe para dar espaço aos gráficos em telas pequenas.
+  O painel de **Resultados** (botão 📋) começa recolhido em telas com menos de 1500 px de largura.
+- **Abas:** Esquema · Diagramas (DEN, DEC, DMF, σ, deformação) · Deformada · Memória de cálculo.
+- **Valores ao passar o mouse** em qualquer diagrama (linha vertical + caixa com N, V, M, σ e δ).
+- **Estrutura deformada** com controle de ampliação (os deslocamentos reais são de décimos de mm;
+  o fator só serve para enxergar, e o título mostra os valores reais).
+- **Memória de cálculo:** cada resultado com a equação, os números substituídos e a unidade.
+- **Exportar:** PNG dos diagramas e da deformada, CSV (abre direto no Excel em português),
+  TXT da memória de cálculo, ou tudo de uma vez numa pasta.
+
+### Coeficiente de segurança e flambagem
+
+FS = limite / valor atuante (escoamento nas barras e na viga, τ_adm nos pinos). Cores:
+**verde** FS ≥ 1,5 · **amarelo** 1 ≤ FS < 1,5 · **vermelho** FS < 1. O limite de 1,5 é uma
+escolha do programa (constante `FS_ATENCAO` em `calculos.py`), não uma norma.
+
+Barras **comprimidas** também são verificadas à flambagem: extremidades articuladas (K = 1, por
+causa dos pinos), λ = L/r com r = √(I_mín/A). Se λ ≥ λc = π√(2E/σ_esc) vale Euler
+(σ_cr = π²E/λ²); abaixo disso, parábola de Johnson. FS = P_cr / |N|.
 
 ## Como o .exe é gerado
 

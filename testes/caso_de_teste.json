@@ -53,6 +53,11 @@
     "alongamento_barraB_mm": 0.21221,
     "desloc_B_mm": -0.53052,
     "desloc_C_mm": 0.21221,
-    "desloc_A_mm_viga_rigida": -1.02567
+    "desloc_A_mm_viga_rigida": -1.02567,
+    "FS_barraA_escoamento": 2.3562,
+    "FS_barraB_escoamento": 5.8905,
+    "FS_pinoB": 1.7492,
+    "FS_pinoC": 4.3731,
+    "FS_viga_flexao": 1.3021
   }
 }
