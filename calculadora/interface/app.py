@@ -2,9 +2,9 @@
 # JANELA PRINCIPAL: monta a tela e liga as partes (entradas -> cálculo -> saídas)
 #
 # Layout (pensado para telas pequenas, a partir do dashboard):
-#   ┌ cabeçalho: ☰ Variáveis | título | 📋 Resultados | 💾 Exportar ┐
+#   ┌ cabeçalho: ☰ Variáveis | título | 💾 Exportar ┐
 #   │ barra lateral   │  abas: Esquema · DEIS · Deformada · Memória  │ resultados │
-# As duas colunas laterais podem ser recolhidas para dar espaço aos gráficos.
+# A barra de variáveis pode ser recolhida; os resultados ficam sempre visíveis.
 # ==============================================================================
 import base64
 import os
@@ -23,11 +23,10 @@ from calculadora.interface.painel_entradas import PainelEntradas
 from calculadora.interface.painel_resultados import PainelResultados
 from calculadora.interface.tema import CORES
 
-LARGURA_PARA_RESULTADOS_FIXOS = 1500   # abaixo disso o painel de resultados começa recolhido
 
 
 class ResmatCalculatorApp(tk.Tk):
-    ATRASO_RECALCULO_MS = 60   # espera o usuário parar de digitar para recalcular
+    ATRASO_RECALCULO_MS = 150  # espera o usuário parar de digitar para recalcular
     codigo_saida = 0           # 1 se o teste rápido falhar (usado na geração do .exe)
 
     def __init__(self):
@@ -48,6 +47,8 @@ class ResmatCalculatorApp(tk.Tk):
         self.calculadora = CalculadoraEstrutural()
         self._recalculo_agendado = None
         self._ultimo = None          # (dados, resultados, unidades) do último cálculo válido
+        self._desatualizadas = set() # abas pesadas que ainda não foram redesenhadas
+        self._esquema_agendado = None
 
         self._montar_tela()
         self.agendar_recalculo()
@@ -77,7 +78,20 @@ class ResmatCalculatorApp(tk.Tk):
         st.map("TNotebook.Tab", background=[("selected", CORES["campo"])],
                foreground=[("selected", CORES["texto"])])
         st.configure("TCombobox", fieldbackground=CORES["campo"], background=CORES["botao"],
-                     foreground=CORES["texto"], arrowcolor=CORES["texto"])
+                     foreground=CORES["texto"], arrowcolor=CORES["texto"],
+                     selectbackground=CORES["campo"], selectforeground=CORES["texto"])
+        st.map("TCombobox",
+               fieldbackground=[("readonly", CORES["campo"]), ("disabled", CORES["painel"])],
+               foreground=[("readonly", CORES["texto"])],
+               selectbackground=[("readonly", CORES["campo"])],
+               selectforeground=[("readonly", CORES["texto"])],
+               background=[("active", CORES["botao_ativo"]), ("readonly", CORES["botao"])])
+        # A lista que se abre é um Listbox do Tk (fora do ttk): estilo pelo option_add
+        self.option_add("*TCombobox*Listbox.background", CORES["campo"])
+        self.option_add("*TCombobox*Listbox.foreground", CORES["texto"])
+        self.option_add("*TCombobox*Listbox.selectBackground", CORES["azul"])
+        self.option_add("*TCombobox*Listbox.selectForeground", CORES["fundo_escuro"])
+        self.option_add("*TCombobox*Listbox.font", ("Helvetica", 10))
         st.configure("Vertical.TScrollbar", background=CORES["botao"], troughcolor=CORES["fundo"],
                      arrowcolor=CORES["texto"], borderwidth=0)
 
@@ -104,7 +118,6 @@ class ResmatCalculatorApp(tk.Tk):
         self._botao(cab, "☰ Variáveis", lambda: self._alternar("esq")).pack(side=tk.LEFT, padx=8, pady=6)
         tk.Label(cab, text="A3 RESMAT I — CALCULADORA ESTRUTURAL", font=("Helvetica", 12, "bold"),
                  fg=CORES["texto"], bg=CORES["painel"]).pack(side=tk.LEFT, padx=10)
-        self._botao(cab, "📋 Resultados", lambda: self._alternar("dir")).pack(side=tk.RIGHT, padx=8)
         # Faixa de exportação (aparece ao clicar em "Exportar"; sem menus nativos)
         self._faixa_exportar = tk.Frame(self, bg=CORES["campo"])
         for texto, tipo in (("Diagramas PNG", "deis"), ("Deformada PNG", "def"),
@@ -123,7 +136,7 @@ class ResmatCalculatorApp(tk.Tk):
         self.esq = tk.Frame(corpo, bg=CORES["painel"])
         self.dir = tk.Frame(corpo, bg=CORES["painel"])
         self.centro = tk.Frame(corpo, bg=CORES["fundo"])
-        self._visivel = {"esq": True, "dir": self.winfo_screenwidth() >= LARGURA_PARA_RESULTADOS_FIXOS}
+        self._visivel = {"esq": True, "dir": True}   # só a barra de variáveis recolhe
         self._empacotar()
 
         self.entradas = PainelEntradas(self.esq, ao_mudar=self.agendar_recalculo)
@@ -135,10 +148,10 @@ class ResmatCalculatorApp(tk.Tk):
                               ("def", "〰 Deformada"), ("mem", "🧮 Memória de cálculo")):
             quadros[chave] = tk.Frame(self.abas, bg=CORES["painel"])
             self.abas.add(quadros[chave], text=titulo)
-        self.abas.bind("<<NotebookTabChanged>>", lambda e: self.agendar_recalculo())
+        self.abas.bind("<<NotebookTabChanged>>", lambda e: self._atualizar_aba_visivel())
 
         self.esquema = EsquemaEstrutural(quadros["esq"], ao_clicar_duas_vezes=self.editar_P,
-                                         ao_redimensionar=self.agendar_recalculo)
+                                         ao_redimensionar=self._agendar_esquema)
         self.graficos = GraficosDEIS(quadros["deis"])
         self.deformada = GraficoDeformada(quadros["def"])
         self.memoria = MemoriaView(quadros["mem"])
@@ -163,7 +176,7 @@ class ResmatCalculatorApp(tk.Tk):
     def _alternar(self, lado):
         self._visivel[lado] = not self._visivel[lado]
         self._empacotar()
-        self.agendar_recalculo()
+        self._agendar_esquema()
 
     # --------------------------------------------------------------------------
     def agendar_recalculo(self, *_):
@@ -194,11 +207,36 @@ class ResmatCalculatorApp(tk.Tk):
 
         unidades = self.entradas.unidades_saida()
         self._ultimo = (dados, resultados, unidades)
-        self.esquema.desenhar(dados, resultados, unidades)
-        self.graficos.atualizar(dados, resultados, unidades)
-        self.deformada.atualizar(dados, resultados, unidades)
-        self.memoria.mostrar(dados, resultados, unidades)
         self.resultados.mostrar(dados, resultados, unidades)
+        # Só a aba que está na tela é redesenhada; as outras esperam o usuário abrir
+        # (era isso que deixava o programa lento: tudo era refeito a cada tecla).
+        self._desatualizadas = {"esq", "deis", "def", "mem"}
+        self._atualizar_aba_visivel()
+
+    def _chave_aba(self):
+        return ("esq", "deis", "def", "mem")[self.abas.index(self.abas.select())]
+
+    def _atualizar_aba_visivel(self):
+        if self._ultimo is None:
+            return
+        chave = self._chave_aba()
+        if chave not in self._desatualizadas:
+            return
+        self._desatualizadas.discard(chave)
+        d, r, u = self._ultimo
+        {"esq": self.esquema.desenhar, "deis": self.graficos.atualizar,
+         "def": self.deformada.atualizar, "mem": self.memoria.mostrar}[chave](d, r, u)
+
+    def _agendar_esquema(self, *_):
+        """Redimensionar a janela só redesenha o esquema (e só se ele estiver visível)."""
+        if self._esquema_agendado is not None:
+            self.after_cancel(self._esquema_agendado)
+        self._esquema_agendado = self.after(80, self._redesenhar_esquema)
+
+    def _redesenhar_esquema(self):
+        self._esquema_agendado = None
+        self._desatualizadas.add("esq")
+        self._atualizar_aba_visivel()
 
     # --------------------------------------------------------------------------
     def exportar(self, tipo):
@@ -247,16 +285,17 @@ class ResmatCalculatorApp(tk.Tk):
             for i, aba in enumerate(self.abas.tabs()):          # percorre todas as abas
                 self.abas.select(aba)
                 self.update()
+                self._atualizar_aba_visivel()
                 self.graficos.canvas.draw()
                 self.deformada.canvas.draw()
                 if capturas:
                     self._capturar(os.path.join(capturas, f"aba{i + 1}.png"))
-            if capturas:                                         # com e sem resultados
-                self._visivel["dir"] = True
-                self._empacotar()
+            if capturas:                                         # com a barra de variáveis recolhida
                 self.abas.select(0)
+                self._alternar("esq")
                 self.update()
-                self._capturar(os.path.join(capturas, "com_resultados.png"))
+                self._atualizar_aba_visivel()
+                self._capturar(os.path.join(capturas, "sem_variaveis.png"))
             with tempfile.TemporaryDirectory() as pasta:         # exportação de ponta a ponta
                 d, r, u = self._ultimo
                 for arq in saidas.exportar_tudo(pasta, d, r, u, self.deformada.fator.get()):

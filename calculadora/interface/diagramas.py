@@ -12,13 +12,11 @@ from calculadora.interface.tema import CORES
 
 
 def criar_figura():
-    """Figura com 5 gráficos empilhados (mesmo eixo x)."""
-    try:
-        fig = Figure(figsize=(7, 10), facecolor=CORES["painel"], layout="constrained")
-    except TypeError:   # matplotlib antigo (< 3.5)
-        fig = Figure(figsize=(7, 10), facecolor=CORES["painel"])
-        fig.set_tight_layout(True)
+    """Figura com 5 gráficos empilhados (mesmo eixo x).
+    Margens fixas (subplots_adjust): o layout automático é bem mais lento."""
+    fig = Figure(figsize=(7, 10), facecolor=CORES["painel"])
     axes = fig.subplots(5, 1, sharex=True)
+    fig.subplots_adjust(left=0.11, right=0.97, top=0.965, bottom=0.05, hspace=0.62)
     return fig, axes
 
 
@@ -147,22 +145,45 @@ class LeitorCursor:
         self.x = self.series = self.rotulos = None
         self.linhas, self.caixa = [], None
         self._cid = None
+        self._fundo = None          # imagem do gráfico sem o cursor (para blit)
 
     def definir(self, x, series, rotulos):
         """x: posições (já na unidade de exibição). series/rotulos: um por gráfico."""
         self.x, self.series, self.rotulos = np.asarray(x), series, rotulos
         # clear() dos eixos remove os artistas antigos; recria
         self.linhas = [ax.axvline(self.x[0], color=CORES["amarelo"], linewidth=1,
-                                  alpha=0.9, visible=False) for ax in self.axes]
+                                  alpha=0.9, visible=False, animated=True) for ax in self.axes]
         self.caixa = self.axes[0].annotate(
             "", (0, 1), xycoords="axes fraction", xytext=(8, -8), textcoords="offset points",
-            va="top", ha="left", fontsize=8, color=CORES["texto"], visible=False, zorder=20,
+            va="top", ha="left", fontsize=8, color=CORES["texto"], visible=False, zorder=20, animated=True,
             bbox=dict(boxstyle="round,pad=0.4", fc=CORES["painel"], ec=CORES["amarelo"], alpha=0.95))
 
     def ligar(self):
         if self._cid is None:
             self._cid = self.fig.canvas.mpl_connect("motion_notify_event", self._mover)
             self.fig.canvas.mpl_connect("figure_leave_event", lambda e: self.esconder(True))
+            self.fig.canvas.mpl_connect("draw_event", self._guardar_fundo)
+
+    def _guardar_fundo(self, _ev=None):
+        try:
+            self._fundo = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+        except Exception:
+            self._fundo = None
+
+    def _mostrar_rapido(self):
+        """Redesenha só o cursor (blit) em vez de refazer os 5 gráficos."""
+        c = self.fig.canvas
+        if self.caixa is None:
+            return
+        if self._fundo is None:
+            return c.draw_idle()
+        c.restore_region(self._fundo)
+        for ln, ax in zip(self.linhas, self.axes):
+            if ln.get_visible():
+                ax.draw_artist(ln)
+        if self.caixa.get_visible():
+            self.axes[0].draw_artist(self.caixa)
+        c.blit(self.fig.bbox)
 
     def texto_em(self, x_cursor):
         """Texto com os valores no ponto mais próximo de x_cursor (testável sem mouse)."""
@@ -181,7 +202,7 @@ class LeitorCursor:
             ln.set_visible(True)
         self.caixa.set_text(texto)
         self.caixa.set_visible(True)
-        self.fig.canvas.draw_idle()
+        self._mostrar_rapido()
 
     def esconder(self, redesenhar=False):
         for ln in self.linhas:
@@ -189,7 +210,7 @@ class LeitorCursor:
         if self.caixa is not None:
             self.caixa.set_visible(False)
         if redesenhar:
-            self.fig.canvas.draw_idle()
+            self._mostrar_rapido()
 
 
 def series_do_cursor(d, r, unidades):
@@ -225,11 +246,10 @@ def fator_automatico(d, r):
 
 
 def criar_figura_deformada():
-    try:
-        fig = Figure(figsize=(8, 5), facecolor=CORES["painel"], layout="constrained")
-    except TypeError:
-        fig = Figure(figsize=(8, 5), facecolor=CORES["painel"])
-    return fig, fig.add_subplot(111)
+    fig = Figure(figsize=(8, 5), facecolor=CORES["painel"])
+    ax = fig.add_subplot(111)
+    fig.subplots_adjust(left=0.03, right=0.98, top=0.92, bottom=0.1)
+    return fig, ax
 
 
 def desenhar_deformada(ax, d, r, unidades, fator):

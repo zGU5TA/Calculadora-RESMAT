@@ -101,7 +101,7 @@ N(x) = 0 em toda a viga, pois todas as forças que atuam nela são verticais.
 ## Telas e recursos
 
 - **Barra lateral de variáveis** (botão ☰): recolhe para dar espaço aos gráficos em telas pequenas.
-  O painel de **Resultados** (botão 📋) começa recolhido em telas com menos de 1500 px de largura.
+  O painel de **Resultados** ficam sempre visíveis.
 - **Abas:** Esquema · Diagramas (DEN, DEC, DMF, σ, deformação) · Deformada · Memória de cálculo.
 - **Valores ao passar o mouse** em qualquer diagrama (linha vertical + caixa com N, V, M, σ e δ).
 - **Estrutura deformada** com controle de ampliação (os deslocamentos reais são de décimos de mm;
