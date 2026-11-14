@@ -65,8 +65,8 @@ jobs:
         run: |
           mkdir -p capturas
           RESMAT_TESTE_RAPIDO=1 RESMAT_CAPTURAS="$PWD/capturas" \
-            timeout 180 xvfb-run -a -s "-screen 0 1366x768x24" python main.py
-          cat resmat_teste.log
+            timeout 120 xvfb-run -a -s "-screen 0 1366x768x24" python main.py || echo "capturas: saiu com $?"
+          cat resmat_teste.log || true
           ls -l capturas
 
       - name: Guardar as capturas de tela

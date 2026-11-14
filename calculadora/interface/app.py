@@ -234,6 +234,9 @@ class ResmatCalculatorApp(tk.Tk):
             if self._ultimo is None:
                 raise RuntimeError("os dados padrão não passaram na validação")
             capturas = os.environ.get("RESMAT_CAPTURAS")
+            if capturas:   # diagnóstico: se travar, mostra onde
+                import faulthandler
+                faulthandler.dump_traceback_later(60, exit=True)
             for i, aba in enumerate(self.abas.tabs()):          # percorre todas as abas
                 self.abas.select(aba)
                 self.update()
@@ -256,6 +259,11 @@ class ResmatCalculatorApp(tk.Tk):
         except Exception:
             self.codigo_saida = 1
             mensagem = traceback.format_exc()
+        try:
+            import faulthandler
+            faulthandler.cancel_dump_traceback_later()
+        except Exception:
+            pass
         with open("resmat_teste.log", "w", encoding="utf-8") as arquivo:
             arquivo.write(mensagem + "\n")
         self.destroy()
