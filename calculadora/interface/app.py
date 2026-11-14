@@ -31,6 +31,9 @@ class ResmatCalculatorApp(tk.Tk):
     codigo_saida = 0           # 1 se o teste rápido falhar (usado na geração do .exe)
 
     def __init__(self):
+        if os.environ.get("RESMAT_TESTE_RAPIDO"):   # se travar no teste, mostra onde
+            import faulthandler
+            faulthandler.dump_traceback_later(90, exit=True)
         super().__init__()
         self.title("A3 - Calculadora Estrutural Interativa | Resistência dos Materiais I")
         self.configure(bg=CORES["fundo"])
@@ -234,9 +237,6 @@ class ResmatCalculatorApp(tk.Tk):
             if self._ultimo is None:
                 raise RuntimeError("os dados padrão não passaram na validação")
             capturas = os.environ.get("RESMAT_CAPTURAS")
-            if capturas:   # diagnóstico: se travar, mostra onde
-                import faulthandler
-                faulthandler.dump_traceback_later(60, exit=True)
             for i, aba in enumerate(self.abas.tabs()):          # percorre todas as abas
                 self.abas.select(aba)
                 self.update()
