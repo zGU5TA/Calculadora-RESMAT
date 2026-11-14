@@ -32,8 +32,12 @@ class ResmatCalculatorApp(tk.Tk):
 
     def __init__(self):
         if os.environ.get("RESMAT_TESTE_RAPIDO"):   # se travar no teste, mostra onde
-            import faulthandler
-            faulthandler.dump_traceback_later(90, exit=True)
+            try:   # no .exe sem console não existe stderr: grava num arquivo
+                import faulthandler
+                self._log_travou = open("resmat_travou.log", "w")
+                faulthandler.dump_traceback_later(90, exit=True, file=self._log_travou)
+            except Exception:
+                pass
         super().__init__()
         self.title("A3 - Calculadora Estrutural Interativa | Resistência dos Materiais I")
         self.configure(bg=CORES["fundo"])
