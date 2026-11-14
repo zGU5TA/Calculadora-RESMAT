@@ -3,7 +3,8 @@
 Viga principal AC apoiada em duas barras verticais (BD para cima, CE para baixo),
 com uma carga P. Calcula equilíbrio, tensões nas barras, cisalhamento nos
 pinos/rebites (com quantidade de pinos e cisalhamento simples/duplo), DEN, DEC,
-DMF, tensão de flexão e a deformação da viga (tratada como rígida, veja abaixo).
+DMF, tensão de flexão e a deformação da viga (tratada como rígida, veja abaixo), além de
+coeficientes de segurança, flambagem das barras comprimidas e memória de cálculo.
 
 ## Como abrir
 
@@ -68,6 +69,7 @@ testes/
 
 Para conferir os cálculos: `python testes/testes_calculos.py` (imprime a tabela
 programa × cálculo manual, com diferença absoluta e percentual).
+Para conferir memória, CSV, PNG, leitor do mouse e deformada: `python testes/testes_saidas.py`.
 
 ## Caso de teste (cálculo manual)
 
@@ -101,7 +103,9 @@ N(x) = 0 em toda a viga, pois todas as forças que atuam nela são verticais.
 ## Telas e recursos
 
 - **Barra lateral de variáveis** (botão ☰): recolhe para dar espaço aos gráficos em telas pequenas.
-  Os **Resultados** ficam sempre visíveis à direita.
+  Os **Resultados** ficam sempre visíveis à direita, com cartões coloridos de segurança.
+- **Desempenho:** só a aba aberta é redesenhada a cada mudança nos dados; as outras são
+  atualizadas quando você as abre.
 - **Abas:** Esquema · Diagramas (DEN, DEC, DMF, σ, deformação) · Deformada · Memória de cálculo.
 - **Valores ao passar o mouse** em qualquer diagrama (linha vertical + caixa com N, V, M, σ e δ).
 - **Estrutura deformada** com controle de ampliação (os deslocamentos reais são de décimos de mm;
@@ -122,10 +126,15 @@ causa dos pinos), λ = L/r com r = √(I_mín/A). Se λ ≥ λc = π√(2E/σ_es
 
 ## Como o .exe é gerado
 
-A cada push na `main`, o GitHub Actions (aba **Actions**) instala o Python num
-Windows, roda os testes, gera o `.exe` com PyInstaller, abre o `.exe` para
-testar e publica em **Releases**. Em pull requests o `.exe` fica em
-**Actions → (execução) → Artifacts**.
+A cada push na `main`, o GitHub Actions (aba **Actions**) gera os executáveis de Windows,
+Linux, Mac Apple Silicon e Mac Intel com PyInstaller (com o ícone do projeto). Em cada um
+roda os testes, abre o programa para conferir que ele inicia, calcula, desenha todas as abas e
+exporta os arquivos, e então publica tudo em **Releases**. No Linux também tira capturas de
+tela numa tela pequena (1366×768), guardadas em **Actions → (execução) → Artifacts**.
+Em pull requests os executáveis ficam em **Artifacts**.
+
+O ícone vem de `assets/logo_original.png`; para trocá-lo, rode `python ferramentas/gerar_icones.py`
+(precisa do Pillow).
 
 ## Convenções
 
@@ -150,7 +159,8 @@ Quem se deforma são as barras:
 - Qualquer outro ponto (A, ponto da carga P) sai por semelhança de triângulos:
   `δ(x) = δB + (δC − δB)·(x − x_B)/(x_C − x_B)`.
 
-O gráfico mostra a posição original (tracejada), a reta deformada e as cotas δA, δB e δC
+A aba **Deformada** desenha a estrutura (antes tracejada, depois cheia) com fator de ampliação,
+e o último gráfico da aba **Diagramas** mostra a reta deformada. Eles mostram a posição original (tracejada), a reta deformada e as cotas δA, δB e δC
 (+ sobe, − desce). O painel de resultados também informa a rotação da viga e quanto a flexão
 ignorada valeria (a flecha da viga flexível menos a da rígida), que mostra o tamanho do erro
 da hipótese.
